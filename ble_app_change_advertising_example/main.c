@@ -63,8 +63,11 @@
 #include "nrf_ble_gatt.h"
 #include "nrf_ble_qwr.h"
 #include "app_timer.h"
+
 #include "ble_nus.h"
 #include "ble_bas.h"
+#include "ble_tcs.h"
+
 #include "app_uart.h"
 #include "app_util_platform.h"
 #include "bsp_btn_ble.h"
@@ -85,6 +88,7 @@
 #include "nrf_log.h"
 #include "nrf_log_ctrl.h"
 #include "nrf_log_default_backends.h"
+#include "macros_common.h"
 
 #define APP_BLE_CONN_CFG_TAG            1                                           /**< A tag identifying the SoftDevice BLE configuration. */
 
@@ -97,6 +101,7 @@
 #define NUS_SERVICE_UUID_TYPE           BLE_UUID_TYPE_VENDOR_BEGIN                  /**< UUID type for the Nordic UART Service (vendor specific). */
 
 #define APP_BLE_OBSERVER_PRIO           3                                           /**< Application's BLE observer priority. You shouldn't need to modify this value. */
+#define APP_SOC_OBSERVER_PRIO           1
 
 #define APP_ADV_INTERVAL                64                                          /**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
 
@@ -155,6 +160,82 @@ static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< I
                           // this implementation.
 };
 
+
+#define DEVICE_NAME                     "Thingy"                                    /**< Name of device. Will be included in the advertising data. */
+#define NORDIC_COMPANY_ID               0x0059                                      /**< Nordic Semiconductor ASA company identifier. */
+
+#define APP_ADV_INTERVAL_MS             380                                         /**< The advertising interval in ms. */
+#define APP_ADV_TIMEOUT_IN_SECONDS      180                                         /**< The advertising timeout in s. */
+
+#define MIN_CONN_INTERVAL_MS            7.5                                         /**< Minimum acceptable connection interval in ms. */
+#define MAX_CONN_INTERVAL_MS            30                                          /**< Maximum acceptable connection interval in ms. */
+#define SLAVE_LATENCY                   0                                           /**< Slave latency. */
+#define CONN_SUP_TIMEOUT_MS             3200                                        /**< Connection supervisory timeout (4 seconds), Supervision Timeout uses 10 ms units. */
+#define FIRST_CONN_PARAMS_UPDATE_DELAY  APP_TIMER_TICKS(1000)  /**< Time from initiating event (connect or start of notification) to first time sd_ble_gap_conn_param_update is called (1 second). */
+#define NEXT_CONN_PARAMS_UPDATE_DELAY   APP_TIMER_TICKS(30000) /**< Time between each call to sd_ble_gap_conn_param_update after the first call (30 seconds). */
+#define MAX_CONN_PARAMS_UPDATE_COUNT    3                                           /**< Number of attempts before giving up the connection parameter negotiation. */
+//
+//#define THINGY_SERVICE_ENVIRONMENT      0
+//#define THINGY_SERVICE_MOTION           1
+//#define THINGY_SERVICE_UI               2
+//#define THINGY_SERVICE_SOUND            3
+//#define THINGY_SERVICE_BATTERY          4
+//
+//#define THINGY_SERVICES_MAX             5
+
+/**@brief Thingy default beacon configuration. Eddystone url */
+#define THINGY_BEACON_ADV_INTERVAL      760                 /**< The Beacon's advertising interval, in milliseconds*/
+#define THINGY_BEACON_URL_DEFAULT       "\x03goo.gl/pIWdir" /**< https://goo.gl/pIWdir short for https://developer.nordicsemi.com/thingy/52/ */
+#define THINGY_BEACON_URL_LEN           14
+
+
+/**@brief Thingy FW version.
+ * 0xFF indicates a custom build from source.
+   Version numbers are changed for releases. */
+#define THINGY_FW_VERSION_MAJOR     (0xFF)
+#define THINGY_FW_VERSION_MINOR     (0xFF)
+#define THINGY_FW_VERSION_PATCH     (0xFF)
+
+/**@brief Thingy default configuration. */
+#define THINGY_CONFIG_DEFAULT                         \
+        {                                                     \
+                .dev_name =                                       \
+                {                                                 \
+                        .name = DEVICE_NAME,                          \
+                        .len = 6                                      \
+                },                                                \
+                .adv_params =                                     \
+                {                                                 \
+                        .interval = MSEC_TO_UNITS(APP_ADV_INTERVAL_MS, UNIT_0_625_MS),                  \
+                        .timeout = APP_ADV_TIMEOUT_IN_SECONDS         \
+                },                                                \
+                .conn_params =                                    \
+                {                                                 \
+                        .min_conn_int  = (uint16_t)MSEC_TO_UNITS(MIN_CONN_INTERVAL_MS, UNIT_1_25_MS),   \
+                        .max_conn_int  = MSEC_TO_UNITS(MAX_CONN_INTERVAL_MS, UNIT_1_25_MS),             \
+                        .slave_latency = SLAVE_LATENCY,                                                 \
+                        .sup_timeout   = MSEC_TO_UNITS(CONN_SUP_TIMEOUT_MS, UNIT_10_MS)                 \
+                },                                                \
+                .eddystone_url =                                  \
+                {                                                 \
+                        .data = THINGY_BEACON_URL_DEFAULT,            \
+                        .len  = THINGY_BEACON_URL_LEN                 \
+                },                                                \
+                .fw_version =                                     \
+                {                                                 \
+                        .major = THINGY_FW_VERSION_MAJOR,             \
+                        .minor = THINGY_FW_VERSION_MINOR,             \
+                        .patch = THINGY_FW_VERSION_PATCH              \
+                },                                                \
+                .mtu =                                            \
+                {                                                 \
+                        .req = 0x00,                                  \
+                        .size = 23                                    \
+                }                                                 \
+        }
+
+
+
 #define DEAD_BEEF                       0xDEADBEEF                                  /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
 
 #define UART_TX_BUF_SIZE                256                                         /**< UART TX buffer size. */
@@ -178,16 +259,26 @@ static int8_t m_tx_power = TX_POWER_LEVEL;
 
 BLE_BAS_DEF(m_bas);                                                 /**< Structure used to identify the battery service. */
 BLE_NUS_DEF(m_nus, NRF_SDH_BLE_TOTAL_LINK_COUNT);                                   /**< BLE NUS service instance. */
+BLE_TCS_DEF(m_tcs);
 
 NRF_BLE_GATT_DEF(m_gatt);                                                           /**< GATT module instance. */
 NRF_BLE_QWR_DEF(m_qwr);                                                             /**< Context for the Queued Write module.*/
 BLE_ADVERTISING_DEF(m_advertising);                                                 /**< Advertising module instance. */
 
 APP_TIMER_DEF(m_battery_timer_id);                                  /**< Battery timer. */
-
 static nrf_saadc_value_t adc_buf[2];
-
 static void on_bas_evt(ble_bas_t * p_bas, ble_bas_evt_t * p_evt);
+
+#define SUPPORT_FUNC_MAC_ADDR_STR_LEN 6
+
+static ble_tcs_params_t         * m_ble_config;
+static ble_tcs_params_t         * m_ble_config;
+static const ble_tcs_params_t m_ble_default_config = THINGY_CONFIG_DEFAULT;
+static ble_tcs_mtu_t m_mtu;
+static bool m_flash_disconnect = false;
+static bool m_major_minor_fw_ver_changed = false;
+static char m_mac_addr[SUPPORT_FUNC_MAC_ADDR_STR_LEN];                                  /**< The device MAC address. */
+//static uint8_t m_random_vector_device_id[RANDOM_VECTOR_DEVICE_ID_SIZE];                           /**< Device random ID. Used for NFC BLE pairng on iOS. */
 
 static uint16_t m_conn_handle          = BLE_CONN_HANDLE_INVALID;                   /**< Handle of the current connection. */
 static uint16_t m_ble_nus_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - 3;              /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Nordic UART service module. */
@@ -325,6 +416,26 @@ static void battery_level_meas_timeout_handler(void * p_context)
 }
 
 
+/**@brief Check if flash is currently being accessed.
+ */
+static bool flash_access_ongoing(void)
+{
+        if (nrf_fstorage_is_busy(NULL))
+        {
+                NRF_LOG_INFO("Waiting until all flash operations are completed.");
+                return true;
+        }
+        else
+                return false;
+}
+
+// #ifdef DEBUG
+// bool support_func_sys_halt_debug_enabled(void)
+// {
+//         return(CoreDebug->DHCSR & CoreDebug_DHCSR_C_DEBUGEN_Msk);
+// }
+// #endif
+
 /**@brief Function for assert macro callback.
  *
  * @details This function will be called in case of an assert in the SoftDevice.
@@ -373,13 +484,73 @@ static void tx_power_set(void)
         APP_ERROR_CHECK(err_code);
 }
 
+/**@brief Checks the current version of the FW against the previous version stored in flash.
+ * If a major or minor FW change is detected, modules must reinitialize their flash storage.
+ *
+ * @note: If the FW version is changed while erasing all flash, a FW change cannot be detected.
+ */
+static uint32_t device_config_verify(void)
+{
+        bool update_flash = false;
+        uint32_t err_code;
+
+        bool fw_version_major_changed = ( m_ble_config->fw_version.major != m_ble_default_config.fw_version.major );
+        bool fw_version_minor_changed = ( m_ble_config->fw_version.minor != m_ble_default_config.fw_version.minor );
+        bool fw_version_patch_changed = ( m_ble_config->fw_version.patch != m_ble_default_config.fw_version.patch );
+
+        ble_tcs_fw_version_t prev_fw_version = m_ble_config->fw_version;
+
+        if ( fw_version_major_changed || fw_version_minor_changed || fw_version_patch_changed)
+        {
+                m_ble_config->fw_version.major = m_ble_default_config.fw_version.major;
+                m_ble_config->fw_version.minor = m_ble_default_config.fw_version.minor;
+                m_ble_config->fw_version.patch = m_ble_default_config.fw_version.patch;
+
+                update_flash = true;
+
+                if(fw_version_major_changed || fw_version_minor_changed)
+                {
+                        update_flash = false;
+                        m_major_minor_fw_ver_changed = true;
+
+                        err_code = m_ble_flash_config_store(&m_ble_default_config);
+                        APP_ERROR_CHECK(err_code);
+                }
+        }
+
+        NRF_LOG_INFO("m_ble: Current FW: v%d.%d.%d \r\n",
+                     m_ble_default_config.fw_version.major, m_ble_default_config.fw_version.minor, m_ble_default_config.fw_version.patch);
+
+        if(m_major_minor_fw_ver_changed)
+        {
+                NRF_LOG_INFO("m_ble: Major or minor FW version changed. Prev. FW (from flash): v%d.%d.%d \r\n",
+                             prev_fw_version.major, prev_fw_version.minor, prev_fw_version.patch);
+        }
+
+        // Check Eddystone URL length.
+        if (m_ble_config->eddystone_url.len > 17)
+        {
+                memcpy(m_ble_config->eddystone_url.data, m_ble_default_config.eddystone_url.data, m_ble_default_config.eddystone_url.len);
+                m_ble_config->eddystone_url.len = m_ble_default_config.eddystone_url.len;
+                update_flash = true;
+        }
+
+        if (update_flash)
+        {
+                err_code = m_ble_flash_config_store(m_ble_config);
+                APP_ERROR_CHECK(err_code);
+        }
+
+        return NRF_SUCCESS;
+}
+
 
 /**@brief Function for the GAP initialization.
  *
  * @details This function will set up all the necessary GAP (Generic Access Profile) parameters of
  *          the device. It also sets the permissions and appearance.
  */
-static void gap_params_init(void)
+static void gap_params_init(bool load_setting)
 {
         uint32_t err_code;
         ble_gap_conn_params_t gap_conn_params;
@@ -387,18 +558,41 @@ static void gap_params_init(void)
 
         BLE_GAP_CONN_SEC_MODE_SET_OPEN(&sec_mode);
 
-        err_code = sd_ble_gap_device_name_set(&sec_mode,
-                                              (const uint8_t *) DEVICE_NAME,
-                                              strlen(DEVICE_NAME));
-        APP_ERROR_CHECK(err_code);
+        if (load_setting)
+        {
+                if (m_ble_config)
+                {
+                        err_code = sd_ble_gap_device_name_set(&sec_mode,
+                                                              m_ble_config->dev_name.name,
+                                                              strlen((const char *)m_ble_config->dev_name.name));
+                        APP_ERROR_CHECK(err_code);
+                        NRF_LOG_INFO("gap_params device name = %s", m_ble_config->dev_name.name);
+                }
+        }
+        else
+        {
+                err_code = sd_ble_gap_device_name_set(&sec_mode,
+                                                      (const uint8_t *) DEVICE_NAME,
+                                                      strlen(DEVICE_NAME));
+                APP_ERROR_CHECK(err_code);
+        }
 
         memset(&gap_conn_params, 0, sizeof(gap_conn_params));
+        if (load_setting)
+        {
 
-        gap_conn_params.min_conn_interval = MIN_CONN_INTERVAL;
-        gap_conn_params.max_conn_interval = MAX_CONN_INTERVAL;
-        gap_conn_params.slave_latency     = SLAVE_LATENCY;
-        gap_conn_params.conn_sup_timeout  = CONN_SUP_TIMEOUT;
-
+                gap_conn_params.min_conn_interval = m_ble_config->conn_params.min_conn_int;
+                gap_conn_params.max_conn_interval = m_ble_config->conn_params.max_conn_int;
+                gap_conn_params.slave_latency     = m_ble_config->conn_params.slave_latency;
+                gap_conn_params.conn_sup_timeout  = m_ble_config->conn_params.sup_timeout;
+        }
+        else
+        {
+                gap_conn_params.min_conn_interval = MIN_CONN_INTERVAL;
+                gap_conn_params.max_conn_interval = MAX_CONN_INTERVAL;
+                gap_conn_params.slave_latency     = SLAVE_LATENCY;
+                gap_conn_params.conn_sup_timeout  = CONN_SUP_TIMEOUT;
+        }
         err_code = sd_ble_gap_ppcp_set(&gap_conn_params);
         APP_ERROR_CHECK(err_code);
 
@@ -437,8 +631,8 @@ static void nus_data_handler(ble_nus_evt_t * p_evt)
         {
                 uint32_t err_code;
 
-                NRF_LOG_DEBUG("Received data from BLE NUS. Writing data on UART.");
-                NRF_LOG_HEXDUMP_DEBUG(p_evt->params.rx_data.p_data, p_evt->params.rx_data.length);
+                NRF_LOG_INFO("Received data from BLE NUS. Writing data on UART.");
+                NRF_LOG_HEXDUMP_INFO(p_evt->params.rx_data.p_data, p_evt->params.rx_data.length);
 
                 for (uint32_t i = 0; i < p_evt->params.rx_data.length; i++)
                 {
@@ -461,6 +655,144 @@ static void nus_data_handler(ble_nus_evt_t * p_evt)
 }
 /**@snippet [Handling the data received over BLE] */
 
+static void ble_on_sys_evt(uint32_t sys_evt, void *p_context)
+{
+        switch(sys_evt)
+        {
+        case NRF_EVT_FLASH_OPERATION_ERROR:
+        case NRF_EVT_FLASH_OPERATION_SUCCESS:
+                //if (s_waiting_for_flash)
+        {
+                if (!nrf_fstorage_is_busy(NULL))
+                {
+                        uint32_t err_code;
+                        NRF_LOG_DEBUG("Flash Ready.");
+
+                        if (m_conn_handle != BLE_CONN_HANDLE_INVALID)
+                        {
+                                // Disconnect on GATT Server timeout event.
+                                err_code = sd_ble_gap_disconnect(m_conn_handle,
+                                                                 BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
+                                APP_ERROR_CHECK(err_code);
+                        }
+
+                        nrf_delay_ms(1000);
+                        nrf_pwr_mgmt_shutdown(NRF_PWR_MGMT_SHUTDOWN_RESET);
+
+                }
+        }
+        break;
+        default:
+                /* Ignore */
+                break;
+        }
+}
+
+NRF_SDH_SOC_OBSERVER(ble_soc_observer, APP_SOC_OBSERVER_PRIO, ble_on_sys_evt, NULL);
+
+/**@brief Function for handling thingy configuration events.
+ */
+static void tcs_evt_handler (ble_tcs_t        * p_tcs,
+                             ble_tcs_evt_type_t evt_type,
+                             uint8_t          * p_data,
+                             uint16_t length)
+{
+        bool update_flash = false;
+
+        NRF_LOG_INFO("tcs_evt_handler type = 0x%02x", evt_type);
+
+        switch (evt_type)
+        {
+        case BLE_TCS_EVT_DEV_NAME:
+                if (length <= BLE_TCS_DEVICE_NAME_LEN_MAX)
+                {
+                        memcpy(m_ble_config->dev_name.name, p_data, length);
+                        m_ble_config->dev_name.name[length] = 0;
+                        m_ble_config->dev_name.len = length;
+                        update_flash = true;
+
+                        NRF_LOG_INFO("Change the Name: %s", m_ble_config->dev_name.name)
+                }
+                break;
+        case BLE_TCS_EVT_ADV_PARAM:
+                if (length == sizeof(ble_tcs_adv_params_t))
+                {
+                        NRF_LOG_INFO("Update the Advertising parameter!");
+                        NRF_LOG_HEXDUMP_INFO(p_data, length);
+                        memcpy(&m_ble_config->adv_params, p_data, length);
+                        update_flash = true;
+                }
+                break;
+        case BLE_TCS_EVT_CONN_PARAM:
+                if (length == sizeof(ble_tcs_conn_params_t))
+                {
+                        uint32_t err_code;
+                        ble_gap_conn_params_t gap_conn_params;
+
+                        memcpy(&m_ble_config->conn_params, p_data, length);
+                        memset(&gap_conn_params, 0, sizeof(gap_conn_params));
+
+                        gap_conn_params.min_conn_interval = m_ble_config->conn_params.min_conn_int;
+                        gap_conn_params.max_conn_interval = m_ble_config->conn_params.max_conn_int;
+                        gap_conn_params.slave_latency     = m_ble_config->conn_params.slave_latency;
+                        gap_conn_params.conn_sup_timeout  = m_ble_config->conn_params.sup_timeout;
+
+                        err_code = ble_conn_params_change_conn_params(m_conn_handle, &gap_conn_params);
+                        APP_ERROR_CHECK(err_code);
+
+                        update_flash = true;
+                }
+                break;
+        case BLE_TCS_EVT_BEACON:
+                if (length <= BLE_TCS_BEACON_LEN_MAX)
+                {
+                        uint32_t err_code;
+
+                        memcpy(m_ble_config->eddystone_url.data, p_data, length);
+                        m_ble_config->eddystone_url.len = length;
+                        update_flash = true;
+
+//                        err_code = timeslot_init();
+//                        APP_ERROR_CHECK(err_code);
+                }
+                break;
+        case BLE_TCS_EVT_MTU:
+                if (length == sizeof(ble_tcs_mtu_t))
+                {
+                        uint32_t err_code;
+                        ble_tcs_mtu_t * p_mtu = (ble_tcs_mtu_t *)p_data;
+
+                        if (p_mtu->req == TCS_MTU_REQ_EXCHANGE)
+                        {
+                                NRF_LOG_INFO("tcs_evt_handler: TCS_MTU_REQ_EXCHANGE - %d\r\n", p_mtu->size);
+                                err_code = sd_ble_gattc_exchange_mtu_request(m_conn_handle, p_mtu->size);
+                                if (err_code == NRF_SUCCESS)
+                                {
+                                        memcpy(&m_mtu, p_data, length);
+                                }
+                                else
+                                {
+                                        err_code = ble_tcs_mtu_set(&m_tcs, &m_mtu);
+                                        APP_ERROR_CHECK(err_code);
+                                }
+                        }
+                        else
+                        {
+                                err_code = ble_tcs_mtu_set(&m_tcs, &m_mtu);
+                                APP_ERROR_CHECK(err_code);
+                        }
+                }
+                break;
+        }
+
+        if (update_flash)
+        {
+                uint32_t err_code;
+
+                err_code = m_ble_flash_config_store(m_ble_config);
+                APP_ERROR_CHECK(err_code);
+        }
+}
 
 /**@brief Function for initializing the Battery Service.
  */
@@ -496,6 +828,20 @@ static void nus_init(void)
         APP_ERROR_CHECK(err_code);
 
 }
+
+static void tcs_init(void)
+{
+        ble_tcs_init_t tcs_init;
+        uint32_t err_code;
+
+        tcs_init.p_init_vals = m_ble_config;
+        tcs_init.evt_handler = tcs_evt_handler;
+
+        err_code = ble_tcs_init(&m_tcs, &tcs_init);
+        APP_ERROR_CHECK(err_code);
+}
+
+
 /**@brief Function for initializing services that will be used by the application.
  */
 static void services_init(void)
@@ -510,10 +856,14 @@ static void services_init(void)
         err_code = nrf_ble_qwr_init(&m_qwr, &qwr_init);
         APP_ERROR_CHECK(err_code);
 
+        tcs_init();
+
         // Initialize NUS.
         nus_init();
 
         bas_init();
+
+
 }
 
 
@@ -996,28 +1346,14 @@ static void button_event_handler(uint8_t pin_no, uint8_t button_action)
         case TX_POWER_BUTTON:
                 if (button_action == APP_BUTTON_PUSH)
                 {
-
-                        // int8_t tx_power = (int8_t)(m_tx_power);
                         {
                                 err_code = sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_ADV, m_adv_handle, m_tx_power);
                                 APP_ERROR_CHECK(err_code);
                         }
-                        // display_update();
                 }
                 break;
 
         case APP_STATE_BUTTON:
-                // if (button_action == APP_BUTTON_PUSH)
-                // {
-                //         if (m_application_state.app_state == APP_STATE_IDLE)
-                //         {
-                //                 advertising_start();
-                //         }
-                //         else
-                //         {
-                //                 ble_go_to_idle();
-                //         }
-                // }
                 break;
         default:
                 APP_ERROR_HANDLER(pin_no);
@@ -1066,12 +1402,18 @@ static void power_management_init(void)
 }
 
 
+/**@brief Function for placing the application in low power state while waiting for events.
+ */
+#define FPU_EXCEPTION_MASK 0x0000009F
 /**@brief Function for handling the idle state (main loop).
  *
  * @details If there is no pending log operation, then sleep until next the next event occurs.
  */
 static void idle_state_handle(void)
 {
+        __set_FPSCR(__get_FPSCR()  & ~(FPU_EXCEPTION_MASK));
+        (void) __get_FPSCR();
+        NVIC_ClearPendingIRQ(FPU_IRQn);
         app_sched_execute();
         while(NRF_LOG_PROCESS());
         //UNUSED_RETURN_VALUE(NRF_LOG_PROCESS());
@@ -1106,11 +1448,11 @@ int main(void)
 {
         bool erase_bonds;
         bool connect_mode_enter = false;
+        uint32_t err_code = NRF_SUCCESS;
 
         /* enable instruction cache */
         NRF_NVMC->ICACHECNF = (NVMC_ICACHECNF_CACHEEN_Enabled << NVMC_ICACHECNF_CACHEEN_Pos) +
                               (NVMC_ICACHECNF_CACHEPROFEN_Disabled << NVMC_ICACHECNF_CACHEPROFEN_Pos);
-
 
         // Initialize.
         uart_init();
@@ -1121,10 +1463,24 @@ int main(void)
 
         connect_mode_enter       = connect_adv_enter_check();
 
-//        buttons_leds_init(&erase_bonds);
         buttons_init();
-
         adc_configure();
+
+        /**@brief Load configuration from flash. */
+        err_code = m_ble_flash_init(&m_ble_default_config, &m_ble_config);
+        if (err_code != NRF_SUCCESS)
+        {
+                //jimmy
+                NRF_LOG_ERROR(" m_ble_flash_init failed - %d\r\n", err_code);
+                APP_ERROR_CHECK(err_code);
+        }
+
+        err_code = device_config_verify();
+        if (err_code != NRF_SUCCESS)
+        {
+                NRF_LOG_ERROR("Thingy_config_verify failed - %d\r\n", err_code);
+                APP_ERROR_CHECK(err_code);
+        }
 
         power_management_init();
         ble_stack_init();
@@ -1132,25 +1488,29 @@ int main(void)
 
         application_timer_start();
 
-        if (connect_mode_enter)
+        if (!connect_mode_enter)
         {
-                gap_params_init();
+                gap_params_init(true);
                 gatt_init();
                 services_init();
                 connectable_advertising_init();
                 conn_params_init();
                 // Start execution.
-                NRF_LOG_INFO("Connected Advertising!");
                 connect_advertising_start();
+
+                NRF_LOG_INFO("Connected Advertising!");
         }
         else
         {
-                gap_params_init();
+
+                gap_params_init(true);
                 non_connectable_advertising_init();
-                NRF_LOG_INFO("Non-Connected Advertising!");
                 non_connect_advertising_start();
 
+                NRF_LOG_INFO("Non-Connected Advertising!");
+
         }
+
         // Enter main loop.
         for (;;)
         {

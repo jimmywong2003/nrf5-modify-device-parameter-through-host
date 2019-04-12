@@ -11,10 +11,15 @@
 *.ilk
 *.map
 *.exp
+*.ind
+*.jlink
 
 # Precompiled Headers
 *.gch
 *.pch
+*.asm
+*.ld
+
 
 # Libraries
 *.lib
