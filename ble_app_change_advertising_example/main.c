@@ -64,10 +64,13 @@
 #include "nrf_ble_qwr.h"
 #include "app_timer.h"
 #include "ble_nus.h"
+#include "ble_bas.h"
 #include "app_uart.h"
 #include "app_util_platform.h"
 #include "bsp_btn_ble.h"
 #include "nrf_pwr_mgmt.h"
+
+#include "nrf_drv_saadc.h"
 
 #include "app_scheduler.h"
 #include "nrf_delay.h"
@@ -85,14 +88,19 @@
 
 #define APP_BLE_CONN_CFG_TAG            1                                           /**< A tag identifying the SoftDevice BLE configuration. */
 
-#define DEVICE_NAME                     "Nordic_UART"                               /**< Name of device. Will be included in the advertising data. */
+#define NRF_BL_CONNECT_MODE_BUTTON_PIN BSP_BUTTON_0
+
+#define TX_POWER_BUTTON BSP_BUTTON_1
+#define APP_STATE_BUTTON BSP_BUTTON_2
+
+#define DEVICE_NAME                     "Advertising"                               /**< Name of device. Will be included in the advertising data. */
 #define NUS_SERVICE_UUID_TYPE           BLE_UUID_TYPE_VENDOR_BEGIN                  /**< UUID type for the Nordic UART Service (vendor specific). */
 
 #define APP_BLE_OBSERVER_PRIO           3                                           /**< Application's BLE observer priority. You shouldn't need to modify this value. */
 
 #define APP_ADV_INTERVAL                64                                          /**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
 
-#define APP_ADV_DURATION                18000                                       /**< The advertising duration (180 seconds) in units of 10 milliseconds. */
+#define APP_ADV_DURATION                0                                       /**< The advertising duration (180 seconds) in units of 10 milliseconds. */
 
 #define MIN_CONN_INTERVAL               MSEC_TO_UNITS(20, UNIT_1_25_MS)             /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
 #define MAX_CONN_INTERVAL               MSEC_TO_UNITS(75, UNIT_1_25_MS)             /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
@@ -101,6 +109,51 @@
 #define FIRST_CONN_PARAMS_UPDATE_DELAY  APP_TIMER_TICKS(5000)                       /**< Time from initiating event (connect or start of notification) to first time sd_ble_gap_conn_param_update is called (5 seconds). */
 #define NEXT_CONN_PARAMS_UPDATE_DELAY   APP_TIMER_TICKS(30000)                      /**< Time between each call to sd_ble_gap_conn_param_update after the first call (30 seconds). */
 #define MAX_CONN_PARAMS_UPDATE_COUNT    3                                           /**< Number of attempts before giving up the connection parameter negotiation. */
+
+#define BATTERY_LEVEL_MEAS_INTERVAL         APP_TIMER_TICKS(2000)                   /**< Battery level measurement interval (ticks). */
+#define MIN_BATTERY_LEVEL                   81                                      /**< Minimum simulated battery level. */
+#define MAX_BATTERY_LEVEL                   100                                     /**< Maximum simulated 7battery level. */
+#define BATTERY_LEVEL_INCREMENT             1                                       /**< Increment between each simulated battery level measurement. */
+
+#define ADC_REF_VOLTAGE_IN_MILLIVOLTS   600                                     /**< Reference voltage (in milli volts) used by ADC while doing conversion. */
+#define ADC_PRE_SCALING_COMPENSATION    6                                       /**< The ADC is configured to use VDD with 1/3 prescaling as input. And hence the result of conversion is to be multiplied by 3 to get the actual value of the battery voltage.*/
+#define DIODE_FWD_VOLT_DROP_MILLIVOLTS  270                                     /**< Typical forward voltage drop of the diode . */
+#define ADC_RES_10BIT                   1024                                    /**< Maximum digital value for 10-bit ADC conversion. */
+
+
+#define NON_CONNECTABLE_ADV_INTERVAL    MSEC_TO_UNITS(100, UNIT_0_625_MS)  /**< The advertising interval for non-connectable advertisement (100 ms). This value can vary between 100ms to 10.24s). */
+
+#define APP_BEACON_INFO_LENGTH          0x17                               /**< Total length of information advertised by the Beacon. */
+#define APP_ADV_DATA_LENGTH             0x15                               /**< Length of manufacturer specific data in the advertisement. */
+#define APP_DEVICE_TYPE                 0x02                               /**< 0x02 refers to Beacon. */
+#define APP_MEASURED_RSSI               0xC3                               /**< The Beacon's measured RSSI at 1 meter distance in dBm. */
+#define APP_COMPANY_IDENTIFIER          0x0059                             /**< Company identifier for Nordic Semiconductor ASA. as per www.bluetooth.org. */
+#define APP_MAJOR_VALUE                 0x01, 0x02                         /**< Major value used to identify Beacons. */
+#define APP_MINOR_VALUE                 0x03, 0x04                         /**< Minor value used to identify Beacons. */
+#define APP_BEACON_UUID                 0x01, 0x12, 0x23, 0x34, \
+        0x45, 0x56, 0x67, 0x78, \
+        0x89, 0x9a, 0xab, 0xbc, \
+        0xcd, 0xde, 0xef, 0xf0                                            /**< Proprietary UUID for Beacon. */
+
+#if defined(USE_UICR_FOR_MAJ_MIN_VALUES)
+#define MAJ_VAL_OFFSET_IN_BEACON_INFO   18                                 /**< Position of the MSB of the Major Value in m_beacon_info array. */
+#define UICR_ADDRESS                    0x10001080                         /**< Address of the UICR register used by this example. The major and minor versions to be encoded into the advertising data will be picked up from this location. */
+#endif
+
+#define BUTTON_DETECTION_DELAY APP_TIMER_TICKS(50) /**< Delay from a GPIOTE event until a button is reported as pushed (in number of timer ticks). */
+
+static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< Information advertised by the Beacon. */
+{
+        APP_DEVICE_TYPE, // Manufacturer specific information. Specifies the device type in this
+                         // implementation.
+        APP_ADV_DATA_LENGTH, // Manufacturer specific information. Specifies the length of the
+                             // manufacturer specific data in this implementation.
+        APP_BEACON_UUID, // 128 bit UUID value.
+        APP_MAJOR_VALUE, // Major arbitrary value that can be used to distinguish between Beacons.
+        APP_MINOR_VALUE, // Minor arbitrary value that can be used to distinguish between Beacons.
+        APP_MEASURED_RSSI // Manufacturer specific information. The Beacon's measured TX power in
+                          // this implementation.
+};
 
 #define DEAD_BEEF                       0xDEADBEEF                                  /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
 
@@ -117,12 +170,24 @@
 
 #define TX_POWER_LEVEL                  (8)                                    /**< TX Power Level value. This will be set both in the TX Power service, in the advertising data, and also used to set the radio transmit power. */
 
+static ble_gap_adv_params_t m_adv_params;                                  /**< Parameters to be passed to the stack when starting advertising. */
+static uint8_t m_adv_handle = BLE_GAP_ADV_SET_HANDLE_NOT_SET;              /**< Advertising handle used to identify an advertising set. */
+static uint8_t m_enc_advdata[BLE_GAP_ADV_SET_DATA_SIZE_MAX];               /**< Buffer for storing an encoded advertising set. */
 
+static int8_t m_tx_power = TX_POWER_LEVEL;
 
+BLE_BAS_DEF(m_bas);                                                 /**< Structure used to identify the battery service. */
 BLE_NUS_DEF(m_nus, NRF_SDH_BLE_TOTAL_LINK_COUNT);                                   /**< BLE NUS service instance. */
+
 NRF_BLE_GATT_DEF(m_gatt);                                                           /**< GATT module instance. */
 NRF_BLE_QWR_DEF(m_qwr);                                                             /**< Context for the Queued Write module.*/
 BLE_ADVERTISING_DEF(m_advertising);                                                 /**< Advertising module instance. */
+
+APP_TIMER_DEF(m_battery_timer_id);                                  /**< Battery timer. */
+
+static nrf_saadc_value_t adc_buf[2];
+
+static void on_bas_evt(ble_bas_t * p_bas, ble_bas_evt_t * p_evt);
 
 static uint16_t m_conn_handle          = BLE_CONN_HANDLE_INVALID;                   /**< Handle of the current connection. */
 static uint16_t m_ble_nus_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - 3;              /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Nordic UART service module. */
@@ -130,6 +195,134 @@ static ble_uuid_t m_adv_uuids[]          =                                      
 {
         {BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}
 };
+
+/**@brief Macro to convert the result of ADC conversion in millivolts.
+ *
+ * @param[in]  ADC_VALUE   ADC result.
+ *
+ * @retval     Result converted to millivolts.
+ */
+#define ADC_RESULT_IN_MILLI_VOLTS(ADC_VALUE) \
+        ((((ADC_VALUE) *ADC_REF_VOLTAGE_IN_MILLIVOLTS) / ADC_RES_10BIT) * ADC_PRE_SCALING_COMPENSATION)
+
+
+/**@brief Struct that contains pointers to the encoded advertising data. */
+static ble_gap_adv_data_t m_adv_data =
+{
+        .adv_data =
+        {
+                .p_data = m_enc_advdata,
+                .len    = BLE_GAP_ADV_SET_DATA_SIZE_MAX
+        },
+        .scan_rsp_data =
+        {
+                .p_data = NULL,
+                .len    = 0
+
+        }
+};
+
+
+
+/**@brief Function for initializing button used to enter DFU mode.
+ */
+static void enter_button_init(void)
+{
+        nrf_gpio_cfg_sense_input(NRF_BL_CONNECT_MODE_BUTTON_PIN,
+                                 BUTTON_PULL,
+                                 NRF_GPIO_PIN_SENSE_LOW);
+}
+
+
+/**@brief Function for checking whether to enter DFU mode or not.
+ */
+static bool connect_adv_enter_check(void)
+{
+        if (nrf_gpio_pin_read(NRF_BL_CONNECT_MODE_BUTTON_PIN) == 0)
+        {
+                //NRF_LOG_DEBUG("DFU mode requested via button.");
+                return true;
+        }
+        return false;
+}
+
+/**@brief Function for handling the ADC interrupt.
+ *
+ * @details  This function will fetch the conversion result from the ADC, convert the value into
+ *           percentage and send it to peer.
+ */
+void saadc_event_handler(nrf_drv_saadc_evt_t const * p_event)
+{
+        if (p_event->type == NRF_DRV_SAADC_EVT_DONE)
+        {
+                nrf_saadc_value_t adc_result;
+                uint16_t batt_lvl_in_milli_volts;
+                uint8_t percentage_batt_lvl;
+                uint32_t err_code;
+
+                adc_result = p_event->data.done.p_buffer[0];
+
+                err_code = nrf_drv_saadc_buffer_convert(p_event->data.done.p_buffer, 1);
+                APP_ERROR_CHECK(err_code);
+
+                batt_lvl_in_milli_volts = ADC_RESULT_IN_MILLI_VOLTS(adc_result) +
+                                          DIODE_FWD_VOLT_DROP_MILLIVOLTS;
+                percentage_batt_lvl = battery_level_in_percent(batt_lvl_in_milli_volts);
+
+                NRF_LOG_INFO("Battery service value : %03d %%", percentage_batt_lvl);
+
+                if (m_conn_handle != BLE_CONN_HANDLE_INVALID)
+                {
+                        err_code = ble_bas_battery_level_update(&m_bas, percentage_batt_lvl, BLE_CONN_HANDLE_ALL);
+                        if ((err_code != NRF_SUCCESS) &&
+                            (err_code != NRF_ERROR_INVALID_STATE) &&
+                            (err_code != NRF_ERROR_RESOURCES) &&
+                            (err_code != NRF_ERROR_BUSY) &&
+                            (err_code != BLE_ERROR_GATTS_SYS_ATTR_MISSING)
+                            )
+                        {
+                                APP_ERROR_HANDLER(err_code);
+                        }
+                }
+        }
+}
+
+/**@brief Function for configuring ADC to do battery level conversion.
+ */
+static void adc_configure(void)
+{
+        ret_code_t err_code = nrf_drv_saadc_init(NULL, saadc_event_handler);
+        APP_ERROR_CHECK(err_code);
+
+        nrf_saadc_channel_config_t config =
+                NRF_DRV_SAADC_DEFAULT_CHANNEL_CONFIG_SE(NRF_SAADC_INPUT_VDD);
+
+        err_code = nrf_drv_saadc_channel_init(0, &config);
+        APP_ERROR_CHECK(err_code);
+
+        err_code = nrf_drv_saadc_buffer_convert(&adc_buf[0], 1);
+        APP_ERROR_CHECK(err_code);
+
+        err_code = nrf_drv_saadc_buffer_convert(&adc_buf[1], 1);
+        APP_ERROR_CHECK(err_code);
+}
+
+/**@brief Function for handling the Battery measurement timer timeout.
+ *
+ * @details This function will be called each time the battery level measurement timer expires.
+ *          This function will start the ADC.
+ *
+ * @param[in] p_context   Pointer used for passing some arbitrary information (context) from the
+ *                        app_start_timer() call to the timeout handler.
+ */
+static void battery_level_meas_timeout_handler(void * p_context)
+{
+        UNUSED_PARAMETER(p_context);
+
+        ret_code_t err_code;
+        err_code = nrf_drv_saadc_sample();
+        APP_ERROR_CHECK(err_code);
+}
 
 
 /**@brief Function for assert macro callback.
@@ -154,6 +347,21 @@ static void timers_init(void)
 {
         ret_code_t err_code = app_timer_init();
         APP_ERROR_CHECK(err_code);
+
+        // Create battery timer.
+        err_code = app_timer_create(&m_battery_timer_id,
+                                    APP_TIMER_MODE_REPEATED,
+                                    battery_level_meas_timeout_handler);
+        APP_ERROR_CHECK(err_code);
+}
+
+static void application_timer_start(void)
+{
+
+        // Start battery timer
+        ret_code_t err_code =app_timer_start(m_battery_timer_id, BATTERY_LEVEL_MEAS_INTERVAL, NULL);
+        APP_ERROR_CHECK(err_code);
+
 }
 
 
@@ -254,12 +462,46 @@ static void nus_data_handler(ble_nus_evt_t * p_evt)
 /**@snippet [Handling the data received over BLE] */
 
 
+/**@brief Function for initializing the Battery Service.
+ */
+static void bas_init(void)
+{
+        ret_code_t err_code;
+        ble_bas_init_t bas_init_obj;
+
+        memset(&bas_init_obj, 0, sizeof(bas_init_obj));
+
+        bas_init_obj.evt_handler          = on_bas_evt;
+        bas_init_obj.support_notification = true;
+        bas_init_obj.p_report_ref         = NULL;
+        bas_init_obj.initial_batt_level   = 100;
+
+        bas_init_obj.bl_rd_sec        = SEC_OPEN;
+        bas_init_obj.bl_cccd_wr_sec   = SEC_OPEN;
+        bas_init_obj.bl_report_rd_sec = SEC_OPEN;
+
+        err_code = ble_bas_init(&m_bas, &bas_init_obj);
+        APP_ERROR_CHECK(err_code);
+}
+
+static void nus_init(void)
+{
+        uint32_t err_code;
+        ble_nus_init_t nus_init;
+        memset(&nus_init, 0, sizeof(nus_init));
+
+        nus_init.data_handler = nus_data_handler;
+
+        err_code = ble_nus_init(&m_nus, &nus_init);
+        APP_ERROR_CHECK(err_code);
+
+}
 /**@brief Function for initializing services that will be used by the application.
  */
 static void services_init(void)
 {
         uint32_t err_code;
-        ble_nus_init_t nus_init;
+
         nrf_ble_qwr_init_t qwr_init = {0};
 
         // Initialize Queued Write Module.
@@ -269,12 +511,9 @@ static void services_init(void)
         APP_ERROR_CHECK(err_code);
 
         // Initialize NUS.
-        memset(&nus_init, 0, sizeof(nus_init));
+        nus_init();
 
-        nus_init.data_handler = nus_data_handler;
-
-        err_code = ble_nus_init(&m_nus, &nus_init);
-        APP_ERROR_CHECK(err_code);
+        bas_init();
 }
 
 
@@ -376,6 +615,39 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt)
                 break;
         }
 }
+
+/**@brief Function for handling the Battery Service events.
+ *
+ * @details This function will be called for all Battery Service events which are passed to the
+ |          application.
+ *
+ * @param[in] p_bas  Battery Service structure.
+ * @param[in] p_evt  Event received from the Battery Service.
+ */
+static void on_bas_evt(ble_bas_t * p_bas, ble_bas_evt_t * p_evt)
+{
+        ret_code_t err_code;
+
+        switch (p_evt->evt_type)
+        {
+        case BLE_BAS_EVT_NOTIFICATION_ENABLED:
+
+                // // Start battery timer
+                // err_code = app_timer_start(m_battery_timer_id, BATTERY_LEVEL_MEAS_INTERVAL, NULL);
+                // APP_ERROR_CHECK(err_code);
+                break; // BLE_BAS_EVT_NOTIFICATION_ENABLED
+
+        case BLE_BAS_EVT_NOTIFICATION_DISABLED:
+                err_code = app_timer_stop(m_battery_timer_id);
+                APP_ERROR_CHECK(err_code);
+                break; // BLE_BAS_EVT_NOTIFICATION_DISABLED
+
+        default:
+                // No implementation needed.
+                break;
+        }
+}
+
 
 
 /**@brief Function for handling BLE events.
@@ -494,10 +766,18 @@ static void ble_stack_init(void)
 /**@brief Function for handling events from the GATT library. */
 void gatt_evt_handler(nrf_ble_gatt_t * p_gatt, nrf_ble_gatt_evt_t const * p_evt)
 {
+        uint32_t data_length;
         if ((m_conn_handle == p_evt->conn_handle) && (p_evt->evt_id == NRF_BLE_GATT_EVT_ATT_MTU_UPDATED))
         {
-                m_ble_nus_max_data_len = p_evt->params.att_mtu_effective - OPCODE_LENGTH - HANDLE_LENGTH;
+                data_length = p_evt->params.att_mtu_effective - OPCODE_LENGTH - HANDLE_LENGTH;
                 NRF_LOG_INFO("Data len is set to 0x%X(%d)", m_ble_nus_max_data_len, m_ble_nus_max_data_len);
+                m_ble_nus_max_data_len = data_length;
+        }
+        else if ((m_conn_handle == p_evt->conn_handle) && (p_evt->evt_id == NRF_BLE_GATT_EVT_DATA_LENGTH_UPDATED))
+        {
+                data_length = p_evt->params.att_mtu_effective - OPCODE_LENGTH - HANDLE_LENGTH - 4;
+                NRF_LOG_INFO("gatt_event: Data len is set to 0x%X (%d)", data_length, data_length);
+                m_ble_nus_max_data_len = data_length;
         }
         NRF_LOG_DEBUG("ATT MTU exchange completed. central 0x%x peripheral 0x%x",
                       p_gatt->att_mtu_desired_central,
@@ -516,45 +796,6 @@ void gatt_init(void)
         err_code = nrf_ble_gatt_att_mtu_periph_set(&m_gatt, NRF_SDH_BLE_GATT_MAX_MTU_SIZE);
         APP_ERROR_CHECK(err_code);
 }
-
-
-/**@brief Function for handling events from the BSP module.
- *
- * @param[in]   event   Event generated by button press.
- */
-void bsp_event_handler(bsp_event_t event)
-{
-        uint32_t err_code;
-        switch (event)
-        {
-        case BSP_EVENT_SLEEP:
-                sleep_mode_enter();
-                break;
-
-        case BSP_EVENT_DISCONNECT:
-                err_code = sd_ble_gap_disconnect(m_conn_handle, BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
-                if (err_code != NRF_ERROR_INVALID_STATE)
-                {
-                        APP_ERROR_CHECK(err_code);
-                }
-                break;
-
-        case BSP_EVENT_WHITELIST_OFF:
-                if (m_conn_handle == BLE_CONN_HANDLE_INVALID)
-                {
-                        err_code = ble_advertising_restart_without_whitelist(&m_advertising);
-                        if (err_code != NRF_ERROR_INVALID_STATE)
-                        {
-                                APP_ERROR_CHECK(err_code);
-                        }
-                }
-                break;
-
-        default:
-                break;
-        }
-}
-
 
 /**@brief   Function for handling app_uart events.
  *
@@ -648,9 +889,75 @@ static void uart_init(void)
 /**@snippet [UART Initialization] */
 
 
+
+/**@brief Function for initializing the Advertising functionality.
+ *
+ * @details Encodes the required advertising data and passes it to the stack.
+ *          Also builds a structure to be passed to the stack when starting advertising.
+ */
+static void non_connectable_advertising_init(void)
+{
+        uint32_t err_code;
+        ble_advdata_t advdata;
+        uint8_t flags = BLE_GAP_ADV_FLAG_BR_EDR_NOT_SUPPORTED;
+
+        ble_advdata_manuf_data_t manuf_specific_data;
+
+        manuf_specific_data.company_identifier = APP_COMPANY_IDENTIFIER;
+
+#if defined(USE_UICR_FOR_MAJ_MIN_VALUES)
+        // If USE_UICR_FOR_MAJ_MIN_VALUES is defined, the major and minor values will be read from the
+        // UICR instead of using the default values. The major and minor values obtained from the UICR
+        // are encoded into advertising data in big endian order (MSB First).
+        // To set the UICR used by this example to a desired value, write to the address 0x10001080
+        // using the nrfjprog tool. The command to be used is as follows.
+        // nrfjprog --snr <Segger-chip-Serial-Number> --memwr 0x10001080 --val <your major/minor value>
+        // For example, for a major value and minor value of 0xabcd and 0x0102 respectively, the
+        // the following command should be used.
+        // nrfjprog --snr <Segger-chip-Serial-Number> --memwr 0x10001080 --val 0xabcd0102
+        uint16_t major_value = ((*(uint32_t *)UICR_ADDRESS) & 0xFFFF0000) >> 16;
+        uint16_t minor_value = ((*(uint32_t *)UICR_ADDRESS) & 0x0000FFFF);
+
+        uint8_t index = MAJ_VAL_OFFSET_IN_BEACON_INFO;
+
+        m_beacon_info[index++] = MSB_16(major_value);
+        m_beacon_info[index++] = LSB_16(major_value);
+
+        m_beacon_info[index++] = MSB_16(minor_value);
+        m_beacon_info[index++] = LSB_16(minor_value);
+#endif
+
+        manuf_specific_data.data.p_data = (uint8_t *) m_beacon_info;
+        manuf_specific_data.data.size   = APP_BEACON_INFO_LENGTH;
+
+        // Build and set advertising data.
+        memset(&advdata, 0, sizeof(advdata));
+
+        advdata.name_type             = BLE_ADVDATA_NO_NAME;
+        advdata.flags                 = flags;
+        advdata.p_manuf_specific_data = &manuf_specific_data;
+
+        // Initialize advertising parameters (used when starting advertising).
+        memset(&m_adv_params, 0, sizeof(m_adv_params));
+
+        m_adv_params.properties.type = BLE_GAP_ADV_TYPE_NONCONNECTABLE_NONSCANNABLE_UNDIRECTED;
+        m_adv_params.p_peer_addr     = NULL;// Undirected advertisement.
+        m_adv_params.filter_policy   = BLE_GAP_ADV_FP_ANY;
+        m_adv_params.interval        = NON_CONNECTABLE_ADV_INTERVAL;
+        m_adv_params.duration        = 0;   // Never time out.
+
+        err_code = ble_advdata_encode(&advdata, m_adv_data.adv_data.p_data, &m_adv_data.adv_data.len);
+        APP_ERROR_CHECK(err_code);
+
+        err_code = sd_ble_gap_adv_set_configure(&m_adv_handle, &m_adv_data, &m_adv_params);
+        APP_ERROR_CHECK(err_code);
+}
+
+
+
 /**@brief Function for initializing the Advertising functionality.
  */
-static void advertising_init(void)
+static void connectable_advertising_init(void)
 {
         uint32_t err_code;
         ble_advertising_init_t init;
@@ -659,7 +966,7 @@ static void advertising_init(void)
 
         init.advdata.name_type          = BLE_ADVDATA_FULL_NAME;
         init.advdata.include_appearance = false;
-        init.advdata.flags              = BLE_GAP_ADV_FLAGS_LE_ONLY_LIMITED_DISC_MODE;
+        init.advdata.flags              = BLE_GAP_ADV_FLAGS_LE_ONLY_GENERAL_DISC_MODE;
 
         init.srdata.uuids_complete.uuid_cnt = sizeof(m_adv_uuids) / sizeof(m_adv_uuids[0]);
         init.srdata.uuids_complete.p_uuids  = m_adv_uuids;
@@ -675,22 +982,66 @@ static void advertising_init(void)
         ble_advertising_conn_cfg_tag_set(&m_advertising, APP_BLE_CONN_CFG_TAG);
 }
 
-
-/**@brief Function for initializing buttons and leds.
+/**@brief Function for handling events from the button handler module.
  *
- * @param[out] p_erase_bonds  Will be true if the clear bonding button was pressed to wake the application up.
+ * @param[in] pin_no        The pin that the event applies to.
+ * @param[in] button_action The button action (press/release).
  */
-static void buttons_leds_init(bool * p_erase_bonds)
+static void button_event_handler(uint8_t pin_no, uint8_t button_action)
 {
-        bsp_event_t startup_event;
+        ret_code_t err_code;
 
-        uint32_t err_code = bsp_init(BSP_INIT_LEDS | BSP_INIT_BUTTONS, bsp_event_handler);
+        switch (pin_no)
+        {
+        case TX_POWER_BUTTON:
+                if (button_action == APP_BUTTON_PUSH)
+                {
+
+                        // int8_t tx_power = (int8_t)(m_tx_power);
+                        {
+                                err_code = sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_ADV, m_adv_handle, m_tx_power);
+                                APP_ERROR_CHECK(err_code);
+                        }
+                        // display_update();
+                }
+                break;
+
+        case APP_STATE_BUTTON:
+                // if (button_action == APP_BUTTON_PUSH)
+                // {
+                //         if (m_application_state.app_state == APP_STATE_IDLE)
+                //         {
+                //                 advertising_start();
+                //         }
+                //         else
+                //         {
+                //                 ble_go_to_idle();
+                //         }
+                // }
+                break;
+        default:
+                APP_ERROR_HANDLER(pin_no);
+                break;
+        }
+}
+
+
+/**@brief Function for initializing the button handler module.
+ */
+static void buttons_init(void)
+{
+        ret_code_t err_code;
+
+        //The array must be static because a pointer to it will be saved in the button handler module.
+        static app_button_cfg_t buttons[] =
+        {
+                {TX_POWER_BUTTON, false, BUTTON_PULL, button_event_handler},
+                {APP_STATE_BUTTON, false, BUTTON_PULL, button_event_handler},
+        };
+
+        err_code = app_button_init(buttons, ARRAY_SIZE(buttons),
+                                   BUTTON_DETECTION_DELAY);
         APP_ERROR_CHECK(err_code);
-
-        err_code = bsp_btn_ble_init(NULL, &startup_event);
-        APP_ERROR_CHECK(err_code);
-
-        *p_erase_bonds = (startup_event == BSP_EVENT_CLEAR_BONDING_DATA);
 }
 
 
@@ -730,18 +1081,31 @@ static void idle_state_handle(void)
 
 /**@brief Function for starting advertising.
  */
-static void advertising_start(void)
+static void connect_advertising_start(void)
 {
         uint32_t err_code = ble_advertising_start(&m_advertising, BLE_ADV_MODE_FAST);
         APP_ERROR_CHECK(err_code);
 }
 
+/**@brief Function for starting advertising.
+ */
+static void non_connect_advertising_start(void)
+{
+        ret_code_t err_code;
+
+        err_code = sd_ble_gap_adv_start(m_adv_handle, APP_BLE_CONN_CFG_TAG);
+        APP_ERROR_CHECK(err_code);
+
+        err_code = bsp_indication_set(BSP_INDICATE_ADVERTISING);
+        APP_ERROR_CHECK(err_code);
+}
 
 /**@brief Application main function.
  */
 int main(void)
 {
         bool erase_bonds;
+        bool connect_mode_enter = false;
 
         /* enable instruction cache */
         NRF_NVMC->ICACHECNF = (NVMC_ICACHECNF_CACHEEN_Enabled << NVMC_ICACHECNF_CACHEEN_Pos) +
@@ -752,20 +1116,41 @@ int main(void)
         uart_init();
         log_init();
         timers_init();
-        buttons_leds_init(&erase_bonds);
+
+        enter_button_init();
+
+        connect_mode_enter       = connect_adv_enter_check();
+
+//        buttons_leds_init(&erase_bonds);
+        buttons_init();
+
+        adc_configure();
+
         power_management_init();
         ble_stack_init();
         scheduler_init();
-        gap_params_init();
-        gatt_init();
-        services_init();
-        advertising_init();
-        conn_params_init();
 
-        // Start execution.
-        NRF_LOG_INFO("Advertising Start!!");
-        advertising_start();
+        application_timer_start();
 
+        if (connect_mode_enter)
+        {
+                gap_params_init();
+                gatt_init();
+                services_init();
+                connectable_advertising_init();
+                conn_params_init();
+                // Start execution.
+                NRF_LOG_INFO("Connected Advertising!");
+                connect_advertising_start();
+        }
+        else
+        {
+                gap_params_init();
+                non_connectable_advertising_init();
+                NRF_LOG_INFO("Non-Connected Advertising!");
+                non_connect_advertising_start();
+
+        }
         // Enter main loop.
         for (;;)
         {
