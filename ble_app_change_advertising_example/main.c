@@ -97,8 +97,13 @@
 #define TX_POWER_BUTTON BSP_BUTTON_1
 #define APP_STATE_BUTTON BSP_BUTTON_2
 
-#define DEVICE_NAME                     "Advertising"                               /**< Name of device. Will be included in the advertising data. */
+#define DEVICE_NAME                     "UART_ADV"                                    /**< Name of device. Will be included in the advertising data. */
+#define NORDIC_COMPANY_ID               0x0059                                      /**< Nordic Semiconductor ASA company identifier. */
+
+#define BUTTON_DETECTION_DELAY APP_TIMER_TICKS(50) /**< Delay from a GPIOTE event until a button is reported as pushed (in number of timer ticks). */
+
 #define NUS_SERVICE_UUID_TYPE           BLE_UUID_TYPE_VENDOR_BEGIN                  /**< UUID type for the Nordic UART Service (vendor specific). */
+#define TCS_SERVICE_UUID_TYPE           BLE_UUID_TYPE_VENDOR_BEGIN+1
 
 #define APP_BLE_OBSERVER_PRIO           3                                           /**< Application's BLE observer priority. You shouldn't need to modify this value. */
 #define APP_SOC_OBSERVER_PRIO           1
@@ -107,24 +112,24 @@
 
 #define APP_ADV_DURATION                0                                       /**< The advertising duration (180 seconds) in units of 10 milliseconds. */
 
-#define MIN_CONN_INTERVAL               MSEC_TO_UNITS(20, UNIT_1_25_MS)             /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
-#define MAX_CONN_INTERVAL               MSEC_TO_UNITS(75, UNIT_1_25_MS)             /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
+#define APP_ADV_INTERVAL_MS             380                                         /**< The advertising interval in ms. */
+#define APP_ADV_TIMEOUT_IN_SECONDS      180                                         /**< The advertising timeout in s. */
+
+#define MIN_CONN_INTERVAL_MS            7.5                                         /**< Minimum acceptable connection interval in ms. */
+#define MAX_CONN_INTERVAL_MS            30                                          /**< Maximum acceptable connection interval in ms. */
 #define SLAVE_LATENCY                   0                                           /**< Slave latency. */
-#define CONN_SUP_TIMEOUT                MSEC_TO_UNITS(4000, UNIT_10_MS)             /**< Connection supervisory timeout (4 seconds), Supervision Timeout uses 10 ms units. */
-#define FIRST_CONN_PARAMS_UPDATE_DELAY  APP_TIMER_TICKS(5000)                       /**< Time from initiating event (connect or start of notification) to first time sd_ble_gap_conn_param_update is called (5 seconds). */
-#define NEXT_CONN_PARAMS_UPDATE_DELAY   APP_TIMER_TICKS(30000)                      /**< Time between each call to sd_ble_gap_conn_param_update after the first call (30 seconds). */
+#define CONN_SUP_TIMEOUT_MS             3200                                        /**< Connection supervisory timeout (4 seconds), Supervision Timeout uses 10 ms units. */
+#define FIRST_CONN_PARAMS_UPDATE_DELAY  APP_TIMER_TICKS(5000)  /**< Time from initiating event (connect or start of notification) to first time sd_ble_gap_conn_param_update is called (1 second). */
+#define NEXT_CONN_PARAMS_UPDATE_DELAY   APP_TIMER_TICKS(30000) /**< Time between each call to sd_ble_gap_conn_param_update after the first call (30 seconds). */
 #define MAX_CONN_PARAMS_UPDATE_COUNT    3                                           /**< Number of attempts before giving up the connection parameter negotiation. */
 
-#define BATTERY_LEVEL_MEAS_INTERVAL         APP_TIMER_TICKS(2000)                   /**< Battery level measurement interval (ticks). */
-#define MIN_BATTERY_LEVEL                   81                                      /**< Minimum simulated battery level. */
-#define MAX_BATTERY_LEVEL                   100                                     /**< Maximum simulated 7battery level. */
-#define BATTERY_LEVEL_INCREMENT             1                                       /**< Increment between each simulated battery level measurement. */
-
-#define ADC_REF_VOLTAGE_IN_MILLIVOLTS   600                                     /**< Reference voltage (in milli volts) used by ADC while doing conversion. */
-#define ADC_PRE_SCALING_COMPENSATION    6                                       /**< The ADC is configured to use VDD with 1/3 prescaling as input. And hence the result of conversion is to be multiplied by 3 to get the actual value of the battery voltage.*/
-#define DIODE_FWD_VOLT_DROP_MILLIVOLTS  270                                     /**< Typical forward voltage drop of the diode . */
-#define ADC_RES_10BIT                   1024                                    /**< Maximum digital value for 10-bit ADC conversion. */
-
+// #define MIN_CONN_INTERVAL               MSEC_TO_UNITS(20, UNIT_1_25_MS)             /**< Minimum acceptable connection interval (20 ms), Connection interval uses 1.25 ms units. */
+// #define MAX_CONN_INTERVAL               MSEC_TO_UNITS(75, UNIT_1_25_MS)             /**< Maximum acceptable connection interval (75 ms), Connection interval uses 1.25 ms units. */
+//#define SLAVE_LATENCY                   0                                           /**< Slave latency. */
+//#define CONN_SUP_TIMEOUT                MSEC_TO_UNITS(4000, UNIT_10_MS)             /**< Connection supervisory timeout (4 seconds), Supervision Timeout uses 10 ms units. */
+// #define FIRST_CONN_PARAMS_UPDATE_DELAY  APP_TIMER_TICKS(5000)                       /**< Time from initiating event (connect or start of notification) to first time sd_ble_gap_conn_param_update is called (5 seconds). */
+// #define NEXT_CONN_PARAMS_UPDATE_DELAY   APP_TIMER_TICKS(30000)                      /**< Time between each call to sd_ble_gap_conn_param_update after the first call (30 seconds). */
+// #define MAX_CONN_PARAMS_UPDATE_COUNT    3                                           /**< Number of attempts before giving up the connection parameter negotiation. */
 
 #define NON_CONNECTABLE_ADV_INTERVAL    MSEC_TO_UNITS(100, UNIT_0_625_MS)  /**< The advertising interval for non-connectable advertisement (100 ms). This value can vary between 100ms to 10.24s). */
 
@@ -145,7 +150,6 @@
 #define UICR_ADDRESS                    0x10001080                         /**< Address of the UICR register used by this example. The major and minor versions to be encoded into the advertising data will be picked up from this location. */
 #endif
 
-#define BUTTON_DETECTION_DELAY APP_TIMER_TICKS(50) /**< Delay from a GPIOTE event until a button is reported as pushed (in number of timer ticks). */
 
 static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< Information advertised by the Beacon. */
 {
@@ -161,33 +165,41 @@ static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< I
 };
 
 
-#define DEVICE_NAME                     "Thingy"                                    /**< Name of device. Will be included in the advertising data. */
-#define NORDIC_COMPANY_ID               0x0059                                      /**< Nordic Semiconductor ASA company identifier. */
+#define BATTERY_LEVEL_MEAS_INTERVAL         APP_TIMER_TICKS(2000)                   /**< Battery level measurement interval (ticks). */
+#define MIN_BATTERY_LEVEL                   81                                      /**< Minimum simulated battery level. */
+#define MAX_BATTERY_LEVEL                   100                                     /**< Maximum simulated 7battery level. */
+#define BATTERY_LEVEL_INCREMENT             1                                       /**< Increment between each simulated battery level measurement. */
 
-#define APP_ADV_INTERVAL_MS             380                                         /**< The advertising interval in ms. */
-#define APP_ADV_TIMEOUT_IN_SECONDS      180                                         /**< The advertising timeout in s. */
+#define ADC_REF_VOLTAGE_IN_MILLIVOLTS   600                                     /**< Reference voltage (in milli volts) used by ADC while doing conversion. */
+#define ADC_PRE_SCALING_COMPENSATION    6                                       /**< The ADC is configured to use VDD with 1/3 prescaling as input. And hence the result of conversion is to be multiplied by 3 to get the actual value of the battery voltage.*/
+#define DIODE_FWD_VOLT_DROP_MILLIVOLTS  270                                     /**< Typical forward voltage drop of the diode . */
+#define ADC_RES_10BIT                   1024                                    /**< Maximum digital value for 10-bit ADC conversion. */
 
-#define MIN_CONN_INTERVAL_MS            7.5                                         /**< Minimum acceptable connection interval in ms. */
-#define MAX_CONN_INTERVAL_MS            30                                          /**< Maximum acceptable connection interval in ms. */
-#define SLAVE_LATENCY                   0                                           /**< Slave latency. */
-#define CONN_SUP_TIMEOUT_MS             3200                                        /**< Connection supervisory timeout (4 seconds), Supervision Timeout uses 10 ms units. */
-#define FIRST_CONN_PARAMS_UPDATE_DELAY  APP_TIMER_TICKS(1000)  /**< Time from initiating event (connect or start of notification) to first time sd_ble_gap_conn_param_update is called (1 second). */
-#define NEXT_CONN_PARAMS_UPDATE_DELAY   APP_TIMER_TICKS(30000) /**< Time between each call to sd_ble_gap_conn_param_update after the first call (30 seconds). */
-#define MAX_CONN_PARAMS_UPDATE_COUNT    3                                           /**< Number of attempts before giving up the connection parameter negotiation. */
-//
-//#define THINGY_SERVICE_ENVIRONMENT      0
-//#define THINGY_SERVICE_MOTION           1
-//#define THINGY_SERVICE_UI               2
-//#define THINGY_SERVICE_SOUND            3
-//#define THINGY_SERVICE_BATTERY          4
-//
-//#define THINGY_SERVICES_MAX             5
+
+#define DEAD_BEEF                       0xDEADBEEF                                  /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
+
+#define UART_TX_BUF_SIZE                256                                         /**< UART TX buffer size. */
+#define UART_RX_BUF_SIZE                256                                         /**< UART RX buffer size. */
+
+
+#define SCHED_MAX_EVENT_DATA_SIZE           APP_TIMER_SCHED_EVENT_DATA_SIZE            /**< Maximum size of scheduler events. */
+#ifdef SVCALL_AS_NORMAL_FUNCTION
+#define SCHED_QUEUE_SIZE                    20                                         /**< Maximum number of events in the scheduler queue. More is needed in case of Serialization. */
+#else
+#define SCHED_QUEUE_SIZE                    10                                         /**< Maximum number of events in the scheduler queue. */
+#endif
+
+#define TX_POWER_LEVEL                  (4)                                    /**< TX Power Level value. This will be set both in the TX Power service, in the advertising data, and also used to set the radio transmit power. */
 
 /**@brief Thingy default beacon configuration. Eddystone url */
 #define THINGY_BEACON_ADV_INTERVAL      760                 /**< The Beacon's advertising interval, in milliseconds*/
 #define THINGY_BEACON_URL_DEFAULT       "\x03goo.gl/pIWdir" /**< https://goo.gl/pIWdir short for https://developer.nordicsemi.com/thingy/52/ */
 #define THINGY_BEACON_URL_LEN           14
 
+#define THINGY_DEFAULT_PASSWORD         "0000"
+
+#define THINGY_ADV_PAYLOAD_DEFAULT      "01234567890123456789"
+#define THINGY_ADV_PAYLOAD_LEN           20
 
 /**@brief Thingy FW version.
  * 0xFF indicates a custom build from source.
@@ -231,25 +243,24 @@ static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< I
                 {                                                 \
                         .req = 0x00,                                  \
                         .size = 23                                    \
-                }                                                 \
+                },                                                 \
+                .tx_power =                                        \
+                {                                                   \
+                        .tx_power = TX_POWER_LEVEL,                 \
+                },                                                  \
+                .pwd =                                            \
+                {                                                 \
+                        .data = THINGY_DEFAULT_PASSWORD,           \
+                },                                                 \
+                .adv_payload =                                  \
+                {                                                 \
+                        .data = THINGY_ADV_PAYLOAD_DEFAULT,            \
+                        .len  = THINGY_ADV_PAYLOAD_LEN                 \
+                },                                                    \
         }
 
 
-
-#define DEAD_BEEF                       0xDEADBEEF                                  /**< Value used as error code on stack dump, can be used to identify stack location on stack unwind. */
-
-#define UART_TX_BUF_SIZE                256                                         /**< UART TX buffer size. */
-#define UART_RX_BUF_SIZE                256                                         /**< UART RX buffer size. */
-
-
-#define SCHED_MAX_EVENT_DATA_SIZE           APP_TIMER_SCHED_EVENT_DATA_SIZE            /**< Maximum size of scheduler events. */
-#ifdef SVCALL_AS_NORMAL_FUNCTION
-#define SCHED_QUEUE_SIZE                    20                                         /**< Maximum number of events in the scheduler queue. More is needed in case of Serialization. */
-#else
-#define SCHED_QUEUE_SIZE                    10                                         /**< Maximum number of events in the scheduler queue. */
-#endif
-
-#define TX_POWER_LEVEL                  (8)                                    /**< TX Power Level value. This will be set both in the TX Power service, in the advertising data, and also used to set the radio transmit power. */
+#define SUPPORT_FUNC_MAC_ADDR_STR_LEN 6
 
 static ble_gap_adv_params_t m_adv_params;                                  /**< Parameters to be passed to the stack when starting advertising. */
 static uint8_t m_adv_handle = BLE_GAP_ADV_SET_HANDLE_NOT_SET;              /**< Advertising handle used to identify an advertising set. */
@@ -269,16 +280,13 @@ APP_TIMER_DEF(m_battery_timer_id);                                  /**< Battery
 static nrf_saadc_value_t adc_buf[2];
 static void on_bas_evt(ble_bas_t * p_bas, ble_bas_evt_t * p_evt);
 
-#define SUPPORT_FUNC_MAC_ADDR_STR_LEN 6
-
-static ble_tcs_params_t         * m_ble_config;
 static ble_tcs_params_t         * m_ble_config;
 static const ble_tcs_params_t m_ble_default_config = THINGY_CONFIG_DEFAULT;
+
 static ble_tcs_mtu_t m_mtu;
+
 static bool m_flash_disconnect = false;
 static bool m_major_minor_fw_ver_changed = false;
-static char m_mac_addr[SUPPORT_FUNC_MAC_ADDR_STR_LEN];                                  /**< The device MAC address. */
-//static uint8_t m_random_vector_device_id[RANDOM_VECTOR_DEVICE_ID_SIZE];                           /**< Device random ID. Used for NFC BLE pairng on iOS. */
 
 static uint16_t m_conn_handle          = BLE_CONN_HANDLE_INVALID;                   /**< Handle of the current connection. */
 static uint16_t m_ble_nus_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - 3;              /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Nordic UART service module. */
@@ -324,7 +332,6 @@ static void enter_button_init(void)
                                  NRF_GPIO_PIN_SENSE_LOW);
 }
 
-
 /**@brief Function for checking whether to enter DFU mode or not.
  */
 static bool connect_adv_enter_check(void)
@@ -360,7 +367,7 @@ void saadc_event_handler(nrf_drv_saadc_evt_t const * p_event)
                                           DIODE_FWD_VOLT_DROP_MILLIVOLTS;
                 percentage_batt_lvl = battery_level_in_percent(batt_lvl_in_milli_volts);
 
-                NRF_LOG_INFO("Battery service value : %03d %%", percentage_batt_lvl);
+                NRF_LOG_DEBUG("Battery service value : %03d %%", percentage_batt_lvl);
 
                 if (m_conn_handle != BLE_CONN_HANDLE_INVALID)
                 {
@@ -429,13 +436,6 @@ static bool flash_access_ongoing(void)
                 return false;
 }
 
-// #ifdef DEBUG
-// bool support_func_sys_halt_debug_enabled(void)
-// {
-//         return(CoreDebug->DHCSR & CoreDebug_DHCSR_C_DEBUGEN_Msk);
-// }
-// #endif
-
 /**@brief Function for assert macro callback.
  *
  * @details This function will be called in case of an assert in the SoftDevice.
@@ -468,7 +468,6 @@ static void timers_init(void)
 
 static void application_timer_start(void)
 {
-
         // Start battery timer
         ret_code_t err_code =app_timer_start(m_battery_timer_id, BATTERY_LEVEL_MEAS_INTERVAL, NULL);
         APP_ERROR_CHECK(err_code);
@@ -480,7 +479,9 @@ static void application_timer_start(void)
  */
 static void tx_power_set(void)
 {
-        ret_code_t err_code = sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_CONN, m_conn_handle, TX_POWER_LEVEL);
+        int tx_power = m_ble_config->tx_power.tx_power;
+        NRF_LOG_INFO("TX Power set = %d", tx_power);
+        ret_code_t err_code = sd_ble_gap_tx_power_set(BLE_GAP_TX_POWER_ROLE_ADV, m_adv_handle, tx_power);
         APP_ERROR_CHECK(err_code);
 }
 
@@ -527,6 +528,8 @@ static uint32_t device_config_verify(void)
                              prev_fw_version.major, prev_fw_version.minor, prev_fw_version.patch);
         }
 
+        NRF_LOG_INFO("m_ble: TX Power = %d", m_ble_config->tx_power.tx_power);
+
         // Check Eddystone URL length.
         if (m_ble_config->eddystone_url.len > 17)
         {
@@ -537,7 +540,7 @@ static uint32_t device_config_verify(void)
 
         if (update_flash)
         {
-                err_code = m_ble_flash_config_store(m_ble_config);
+                err_code = m_ble_flash_config_store(m_ble_config, true);
                 APP_ERROR_CHECK(err_code);
         }
 
@@ -588,10 +591,10 @@ static void gap_params_init(bool load_setting)
         }
         else
         {
-                gap_conn_params.min_conn_interval = MIN_CONN_INTERVAL;
-                gap_conn_params.max_conn_interval = MAX_CONN_INTERVAL;
+                gap_conn_params.min_conn_interval = MIN_CONN_INTERVAL_MS;
+                gap_conn_params.max_conn_interval = MAX_CONN_INTERVAL_MS;
                 gap_conn_params.slave_latency     = SLAVE_LATENCY;
-                gap_conn_params.conn_sup_timeout  = CONN_SUP_TIMEOUT;
+                gap_conn_params.conn_sup_timeout  = CONN_SUP_TIMEOUT_MS;
         }
         err_code = sd_ble_gap_ppcp_set(&gap_conn_params);
         APP_ERROR_CHECK(err_code);
@@ -699,7 +702,7 @@ static void tcs_evt_handler (ble_tcs_t        * p_tcs,
 {
         bool update_flash = false;
 
-        NRF_LOG_INFO("tcs_evt_handler type = 0x%02x", evt_type);
+//        NRF_LOG_INFO("tcs_evt_handler type = 0x%02x", evt_type);
 
         switch (evt_type)
         {
@@ -783,13 +786,53 @@ static void tcs_evt_handler (ble_tcs_t        * p_tcs,
                         }
                 }
                 break;
+
+        case BLE_TCS_EVT_TX_POWER:
+                NRF_LOG_INFO("BLE_TCS_EVT_TX_POWER %d", sizeof(ble_tcs_tx_power_t));
+                if (length == sizeof(ble_tcs_tx_power_t))
+                {
+                        uint32_t err_code;
+                        memcpy(&m_ble_config->tx_power.tx_power, p_data, length);
+
+                        NRF_LOG_INFO("Store TX Power");
+                        NRF_LOG_HEXDUMP_INFO(p_data, length);
+                        update_flash = true;
+                }
+                break;
+        case BLE_TCS_EVT_PWD:
+                NRF_LOG_INFO("BLE_TCS_EVT_PWD %d", sizeof(ble_tcs_pwd_t));
+                if (length == sizeof(ble_tcs_pwd_t))
+                {
+                        // uint32_t err_code;
+                        memcpy(m_ble_config->pwd.data, p_data, length);
+                        // ble_tcs_pwd_t * p_tx_power = (ble_tcs_pwd_t *)p_data;
+                        // m_ble_config->tx_power.tx_power = *p_tx_power;
+
+                        NRF_LOG_HEXDUMP_INFO(p_data, length);
+                        update_flash = true;
+                }
+                break;
+
+        case BLE_TCS_EVT_ADV_PAYLOAD:
+                NRF_LOG_INFO("BLE_TCS_EVT_ADV_PAYLOAD");
+                if (length <= BLE_TCS_ADV_PAYLOAD_LEN_MAX)
+                {
+                        uint32_t err_code;
+
+                        memcpy(m_ble_config->adv_payload.data, p_data, length);
+                        m_ble_config->adv_payload.len = length;
+
+                        NRF_LOG_HEXDUMP_INFO(p_data, length);
+                        update_flash = true;
+                }
+                break;
         }
 
         if (update_flash)
         {
                 uint32_t err_code;
 
-                err_code = m_ble_flash_config_store(m_ble_config);
+                err_code = m_ble_flash_config_store(m_ble_config, false);
                 APP_ERROR_CHECK(err_code);
         }
 }
@@ -959,7 +1002,7 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt)
                 APP_ERROR_CHECK(err_code);
                 break;
         case BLE_ADV_EVT_IDLE:
-                sleep_mode_enter();
+                // sleep_mode_enter();
                 break;
         default:
                 break;
@@ -981,7 +1024,6 @@ static void on_bas_evt(ble_bas_t * p_bas, ble_bas_evt_t * p_evt)
         switch (p_evt->evt_type)
         {
         case BLE_BAS_EVT_NOTIFICATION_ENABLED:
-
                 // // Start battery timer
                 // err_code = app_timer_start(m_battery_timer_id, BATTERY_LEVEL_MEAS_INTERVAL, NULL);
                 // APP_ERROR_CHECK(err_code);
@@ -1301,6 +1343,8 @@ static void non_connectable_advertising_init(void)
 
         err_code = sd_ble_gap_adv_set_configure(&m_adv_handle, &m_adv_data, &m_adv_params);
         APP_ERROR_CHECK(err_code);
+
+
 }
 
 
@@ -1343,6 +1387,7 @@ static void button_event_handler(uint8_t pin_no, uint8_t button_action)
 
         switch (pin_no)
         {
+
         case TX_POWER_BUTTON:
                 if (button_action == APP_BUTTON_PUSH)
                 {
@@ -1355,6 +1400,7 @@ static void button_event_handler(uint8_t pin_no, uint8_t button_action)
 
         case APP_STATE_BUTTON:
                 break;
+
         default:
                 APP_ERROR_HANDLER(pin_no);
                 break;
@@ -1414,6 +1460,8 @@ static void idle_state_handle(void)
         __set_FPSCR(__get_FPSCR()  & ~(FPU_EXCEPTION_MASK));
         (void) __get_FPSCR();
         NVIC_ClearPendingIRQ(FPU_IRQn);
+
+
         app_sched_execute();
         while(NRF_LOG_PROCESS());
         //UNUSED_RETURN_VALUE(NRF_LOG_PROCESS());
@@ -1434,6 +1482,8 @@ static void connect_advertising_start(void)
 static void non_connect_advertising_start(void)
 {
         ret_code_t err_code;
+
+        tx_power_set();
 
         err_code = sd_ble_gap_adv_start(m_adv_handle, APP_BLE_CONN_CFG_TAG);
         APP_ERROR_CHECK(err_code);
@@ -1460,10 +1510,11 @@ int main(void)
         timers_init();
 
         enter_button_init();
-
         connect_mode_enter       = connect_adv_enter_check();
 
         buttons_init();
+
+        // Enable the SADDC to measure the battery
         adc_configure();
 
         /**@brief Load configuration from flash. */
@@ -1488,21 +1539,19 @@ int main(void)
 
         application_timer_start();
 
-        if (!connect_mode_enter)
+        if (connect_mode_enter)
         {
                 gap_params_init(true);
                 gatt_init();
                 services_init();
                 connectable_advertising_init();
                 conn_params_init();
-                // Start execution.
                 connect_advertising_start();
 
                 NRF_LOG_INFO("Connected Advertising!");
         }
         else
         {
-
                 gap_params_init(true);
                 non_connectable_advertising_init();
                 non_connect_advertising_start();

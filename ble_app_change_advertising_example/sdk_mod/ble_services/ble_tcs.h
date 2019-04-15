@@ -19,6 +19,11 @@ extern "C" {
 #define BLE_TCS_BEACON_LEN_MAX      17
 #define BLE_TCS_BEACON_LEN_MIN       3
 
+#define BLE_TCS_PWD_LEN_MAX    4
+
+#define BLE_TCS_ADV_PAYLOAD_LEN_MAX 24
+#define BLE_TCS_ADV_PAYLOAD_LEN_MIN 24
+
 #define TCS_ADV_PARAMS_INTERVAL_MIN 32UL
 #define TCS_ADV_PARAMS_INTERVAL_MAX 8000UL
 #define TCS_ADV_PARAMS_TIMEOUT_MIN  0UL
@@ -30,6 +35,8 @@ extern "C" {
 #define TCS_MTU_SIZE_MIN        23UL
 #define TCS_MTU_SIZE_MAX        276UL
 
+
+
 #ifdef __GNUC__
     #ifdef PACKED
         #undef PACKED
@@ -37,13 +44,11 @@ extern "C" {
     #define PACKED(TYPE) TYPE __attribute__ ((packed))
 #endif
 
-
 #define BLE_TCS_DEF(_name)                                                                          \
         static ble_tcs_t _name;                                                                             \
         NRF_SDH_BLE_OBSERVER(_name ## _obs,                                                                 \
                              BLE_TCS_BLE_OBSERVER_PRIO,                                                     \
                              ble_tcs_on_ble_evt, &_name)
-
 
 typedef PACKED ( struct
 {
@@ -86,6 +91,23 @@ typedef PACKED ( struct
         uint8_t len;
 }) ble_tcs_eddystone_url_t;
 
+typedef PACKED ( struct
+{
+        int tx_power;
+}) ble_tcs_tx_power_t;
+
+typedef PACKED ( struct
+{
+        uint8_t data[BLE_TCS_PWD_LEN_MAX];
+}) ble_tcs_pwd_t;
+
+typedef PACKED ( struct
+{
+        uint8_t data[BLE_TCS_ADV_PAYLOAD_LEN_MAX];
+        uint8_t len;
+}) ble_tcs_adv_payload_t;
+
+
 typedef struct
 {
         ble_tcs_dev_name_t dev_name;
@@ -94,18 +116,22 @@ typedef struct
         ble_tcs_eddystone_url_t eddystone_url;
         ble_tcs_fw_version_t fw_version;
         ble_tcs_mtu_t mtu;
+        ble_tcs_tx_power_t tx_power;
+        ble_tcs_pwd_t pwd;
+        ble_tcs_adv_payload_t adv_payload;
 }ble_tcs_params_t;
 
 typedef enum
 {
-        BLE_TCS_EVT_DEV_NAME,
+        BLE_TCS_EVT_DEV_NAME = 0,
         BLE_TCS_EVT_ADV_PARAM,
         BLE_TCS_EVT_CONN_PARAM,
         BLE_TCS_EVT_BEACON,
-        BLE_TCS_EVT_MTU
+        BLE_TCS_EVT_MTU,
+        BLE_TCS_EVT_TX_POWER,
+        BLE_TCS_EVT_PWD,
+        BLE_TCS_EVT_ADV_PAYLOAD,
 }ble_tcs_evt_type_t;
-
-
 
 
 /* Forward declaration of the ble_tcs_t type. */
@@ -142,6 +168,9 @@ struct ble_tcs_s
         ble_gatts_char_handles_t beacon_handles;
         ble_gatts_char_handles_t fwv_handles;
         ble_gatts_char_handles_t mtu_handles;
+        ble_gatts_char_handles_t tx_power_handles;
+        ble_gatts_char_handles_t pwd_handles;
+        ble_gatts_char_handles_t adv_payload_handles;
         uint16_t conn_handle;                              /**< Handle of the current connection (as provided by the S110 SoftDevice). BLE_CONN_HANDLE_INVALID if not in a connection. */
         ble_tcs_evt_handler_t evt_handler;                 /**< Event handler to be called for handling received data. */
 };
