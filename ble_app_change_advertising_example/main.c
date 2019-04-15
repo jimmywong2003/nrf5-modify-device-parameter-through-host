@@ -183,7 +183,6 @@ static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< I
 #define UART_TX_BUF_SIZE                256                                         /**< UART TX buffer size. */
 #define UART_RX_BUF_SIZE                256                                         /**< UART RX buffer size. */
 
-
 #define SCHED_MAX_EVENT_DATA_SIZE           APP_TIMER_SCHED_EVENT_DATA_SIZE            /**< Maximum size of scheduler events. */
 #ifdef SVCALL_AS_NORMAL_FUNCTION
 #define SCHED_QUEUE_SIZE                    20                                         /**< Maximum number of events in the scheduler queue. More is needed in case of Serialization. */
@@ -200,8 +199,8 @@ static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< I
 
 #define THINGY_DEFAULT_PASSWORD         "0000"
 
-#define THINGY_ADV_PAYLOAD_DEFAULT      "01234567890123456789"
-#define THINGY_ADV_PAYLOAD_LEN           20
+#define THINGY_ADV_PAYLOAD_DEFAULT      "01234567890123456789012"
+#define THINGY_ADV_PAYLOAD_LEN           23
 
 /**@brief Thingy FW version.
  * 0xFF indicates a custom build from source.
@@ -216,7 +215,7 @@ static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< I
                 .dev_name =                                       \
                 {                                                 \
                         .name = DEVICE_NAME,                          \
-                        .len = 6                                      \
+                        .len = 10                                     \
                 },                                                \
                 .adv_params =                                     \
                 {                                                 \
@@ -1567,15 +1566,8 @@ int main(void)
         uart_init();
         log_init();
         timers_init();
-
-        enter_button_init();
-        connect_mode_enter       = connect_adv_enter_check();
-
-        buttons_init();
-
         // Enable the SADDC to measure the battery
         adc_configure();
-
         /**@brief Load configuration from flash. */
         err_code = m_ble_flash_init(&m_ble_default_config, &m_ble_config);
         if (err_code != NRF_SUCCESS)
@@ -1584,21 +1576,20 @@ int main(void)
                 NRF_LOG_ERROR(" m_ble_flash_init failed - %d\r\n", err_code);
                 APP_ERROR_CHECK(err_code);
         }
-
         err_code = device_config_verify();
         if (err_code != NRF_SUCCESS)
         {
                 NRF_LOG_ERROR("Thingy_config_verify failed - %d\r\n", err_code);
                 APP_ERROR_CHECK(err_code);
         }
-
+        enter_button_init();
+        connect_mode_enter       = connect_adv_enter_check();
+        buttons_init();
         power_management_init();
         ble_stack_init();
         scheduler_init();
-
         application_timer_start();
-
-        if (!connect_mode_enter)
+        if (connect_mode_enter)
         {
                 gap_params_init(true);
                 gatt_init();

@@ -945,6 +945,7 @@ uint32_t ble_tcs_init(ble_tcs_t * p_tcs, const ble_tcs_init_t * p_tcs_init)
         err_code = tx_power_char_add(p_tcs, p_tcs_init);
         VERIFY_SUCCESS(err_code);
 
+        /* Read/Write Password */
         err_code = pwd_char_add(p_tcs, p_tcs_init);
         VERIFY_SUCCESS(err_code);
 
@@ -952,6 +953,7 @@ uint32_t ble_tcs_init(ble_tcs_t * p_tcs, const ble_tcs_init_t * p_tcs_init)
         VERIFY_SUCCESS(err_code);
 
 #ifdef NRF_PWD_BLE_ENABLED
+        /* Verify the password */
         err_code = pwd_verify_char_add(p_tcs, p_tcs_init);
         VERIFY_SUCCESS(err_code);
 #endif
