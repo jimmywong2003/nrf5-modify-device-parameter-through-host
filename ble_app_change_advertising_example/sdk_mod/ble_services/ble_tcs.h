@@ -107,7 +107,6 @@ typedef PACKED ( struct
         uint8_t len;
 }) ble_tcs_adv_payload_t;
 
-
 typedef struct
 {
         ble_tcs_dev_name_t dev_name;
@@ -119,6 +118,7 @@ typedef struct
         ble_tcs_tx_power_t tx_power;
         ble_tcs_pwd_t pwd;
         ble_tcs_adv_payload_t adv_payload;
+        ble_tcs_pwd_t pwd_verify;
 }ble_tcs_params_t;
 
 typedef enum
@@ -131,6 +131,7 @@ typedef enum
         BLE_TCS_EVT_TX_POWER,
         BLE_TCS_EVT_PWD,
         BLE_TCS_EVT_ADV_PAYLOAD,
+        BLE_TCS_EVT_PWD_VERIFY,
 }ble_tcs_evt_type_t;
 
 
@@ -171,6 +172,7 @@ struct ble_tcs_s
         ble_gatts_char_handles_t tx_power_handles;
         ble_gatts_char_handles_t pwd_handles;
         ble_gatts_char_handles_t adv_payload_handles;
+        ble_gatts_char_handles_t verify_handles;
         uint16_t conn_handle;                              /**< Handle of the current connection (as provided by the S110 SoftDevice). BLE_CONN_HANDLE_INVALID if not in a connection. */
         ble_tcs_evt_handler_t evt_handler;                 /**< Event handler to be called for handling received data. */
 };

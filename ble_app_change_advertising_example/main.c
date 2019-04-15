@@ -90,6 +90,7 @@
 #include "nrf_log_default_backends.h"
 #include "macros_common.h"
 
+
 #define APP_BLE_CONN_CFG_TAG            1                                           /**< A tag identifying the SoftDevice BLE configuration. */
 
 #define NRF_BL_CONNECT_MODE_BUTTON_PIN BSP_BUTTON_0
@@ -130,6 +131,7 @@
 // #define FIRST_CONN_PARAMS_UPDATE_DELAY  APP_TIMER_TICKS(5000)                       /**< Time from initiating event (connect or start of notification) to first time sd_ble_gap_conn_param_update is called (5 seconds). */
 // #define NEXT_CONN_PARAMS_UPDATE_DELAY   APP_TIMER_TICKS(30000)                      /**< Time between each call to sd_ble_gap_conn_param_update after the first call (30 seconds). */
 // #define MAX_CONN_PARAMS_UPDATE_COUNT    3                                           /**< Number of attempts before giving up the connection parameter negotiation. */
+
 
 #define NON_CONNECTABLE_ADV_INTERVAL    MSEC_TO_UNITS(100, UNIT_0_625_MS)  /**< The advertising interval for non-connectable advertisement (100 ms). This value can vary between 100ms to 10.24s). */
 
@@ -260,6 +262,16 @@ static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< I
         }
 
 
+#ifdef NRF_PWD_BLE_ENABLED
+
+APP_TIMER_DEF(m_pwd_timer_id);                                          /**< Battery timer. */
+#define PASSWORD_TIMEOUT_INTERVAL         APP_TIMER_TICKS(NRF_PWD_TIMEOUT_PERIOD)                   /**< Battery level measurement interval (ticks). */
+
+static bool m_pwd_is_verified = false;
+
+#endif
+
+
 #define SUPPORT_FUNC_MAC_ADDR_STR_LEN 6
 
 static ble_gap_adv_params_t m_adv_params;                                  /**< Parameters to be passed to the stack when starting advertising. */
@@ -277,9 +289,12 @@ NRF_BLE_QWR_DEF(m_qwr);                                                         
 BLE_ADVERTISING_DEF(m_advertising);                                                 /**< Advertising module instance. */
 
 APP_TIMER_DEF(m_battery_timer_id);                                  /**< Battery timer. */
+
+/* Battery detection service */
 static nrf_saadc_value_t adc_buf[2];
 static void on_bas_evt(ble_bas_t * p_bas, ble_bas_evt_t * p_evt);
 
+/* Thingy Configure Service */
 static ble_tcs_params_t         * m_ble_config;
 static const ble_tcs_params_t m_ble_default_config = THINGY_CONFIG_DEFAULT;
 
@@ -290,6 +305,7 @@ static bool m_major_minor_fw_ver_changed = false;
 
 static uint16_t m_conn_handle          = BLE_CONN_HANDLE_INVALID;                   /**< Handle of the current connection. */
 static uint16_t m_ble_nus_max_data_len = BLE_GATT_ATT_MTU_DEFAULT - 3;              /**< Maximum length of data (in bytes) that can be transmitted to the peer by the Nordic UART service module. */
+
 static ble_uuid_t m_adv_uuids[]          =                                          /**< Universally unique service identifier. */
 {
         {BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}
@@ -422,6 +438,19 @@ static void battery_level_meas_timeout_handler(void * p_context)
         APP_ERROR_CHECK(err_code);
 }
 
+static void password_timeout_handler(void *p_context)
+{
+        UNUSED_PARAMETER(p_context);
+
+        if (m_pwd_is_verified == false && m_conn_handle != BLE_CONN_HANDLE_INVALID)
+        {
+                NRF_LOG_INFO("Verify the password failure!! Disconnect the LINK!!!");
+                /* Disconnect from the peer. */
+                ret_code_t err_code = sd_ble_gap_disconnect(m_conn_handle, BLE_HCI_REMOTE_USER_TERMINATED_CONNECTION);
+                VERIFY_SUCCESS(err_code);
+        }
+}
+
 
 /**@brief Check if flash is currently being accessed.
  */
@@ -464,6 +493,15 @@ static void timers_init(void)
                                     APP_TIMER_MODE_REPEATED,
                                     battery_level_meas_timeout_handler);
         APP_ERROR_CHECK(err_code);
+
+#ifdef NRF_PWD_BLE_ENABLED
+        // Create battery timer.
+        err_code = app_timer_create(&m_pwd_timer_id,
+                                    APP_TIMER_MODE_SINGLE_SHOT,
+                                    password_timeout_handler);
+        APP_ERROR_CHECK(err_code);
+#endif
+
 }
 
 static void application_timer_start(void)
@@ -529,6 +567,8 @@ static uint32_t device_config_verify(void)
         }
 
         NRF_LOG_INFO("m_ble: TX Power = %d", m_ble_config->tx_power.tx_power);
+
+        NRF_LOG_INFO("Password %c%c%c%c", m_ble_config->pwd.data[0], m_ble_config->pwd.data[1], m_ble_config->pwd.data[2], m_ble_config->pwd.data[3]);
 
         // Check Eddystone URL length.
         if (m_ble_config->eddystone_url.len > 17)
@@ -702,76 +742,91 @@ static void tcs_evt_handler (ble_tcs_t        * p_tcs,
 {
         bool update_flash = false;
 
-//        NRF_LOG_INFO("tcs_evt_handler type = 0x%02x", evt_type);
-
-        switch (evt_type)
+        if (evt_type == BLE_TCS_EVT_PWD_VERIFY)
         {
-        case BLE_TCS_EVT_DEV_NAME:
-                if (length <= BLE_TCS_DEVICE_NAME_LEN_MAX)
+                if (strncmp(p_data, m_ble_config->pwd.data, length)==0)
                 {
-                        memcpy(m_ble_config->dev_name.name, p_data, length);
-                        m_ble_config->dev_name.name[length] = 0;
-                        m_ble_config->dev_name.len = length;
-                        update_flash = true;
-
-                        NRF_LOG_INFO("Change the Name: %s", m_ble_config->dev_name.name)
+                        m_pwd_is_verified = true;
+                        NRF_LOG_INFO("Verification Pass!!");
                 }
-                break;
-        case BLE_TCS_EVT_ADV_PARAM:
-                if (length == sizeof(ble_tcs_adv_params_t))
+        }
+
+        if (m_pwd_is_verified)
+        {
+                switch (evt_type)
                 {
-                        NRF_LOG_INFO("Update the Advertising parameter!");
-                        NRF_LOG_HEXDUMP_INFO(p_data, length);
-                        memcpy(&m_ble_config->adv_params, p_data, length);
-                        update_flash = true;
-                }
-                break;
-        case BLE_TCS_EVT_CONN_PARAM:
-                if (length == sizeof(ble_tcs_conn_params_t))
-                {
-                        uint32_t err_code;
-                        ble_gap_conn_params_t gap_conn_params;
+                case BLE_TCS_EVT_DEV_NAME:
+                        if (length <= BLE_TCS_DEVICE_NAME_LEN_MAX)
+                        {
+                                memcpy(m_ble_config->dev_name.name, p_data, length);
+                                m_ble_config->dev_name.name[length] = 0;
+                                m_ble_config->dev_name.len = length;
+                                update_flash = true;
 
-                        memcpy(&m_ble_config->conn_params, p_data, length);
-                        memset(&gap_conn_params, 0, sizeof(gap_conn_params));
+                                NRF_LOG_INFO("Change the Name: %s", m_ble_config->dev_name.name)
+                        }
+                        break;
+                case BLE_TCS_EVT_ADV_PARAM:
+                        if (length == sizeof(ble_tcs_adv_params_t))
+                        {
+                                NRF_LOG_INFO("Update the Advertising parameter!");
+                                NRF_LOG_HEXDUMP_INFO(p_data, length);
+                                memcpy(&m_ble_config->adv_params, p_data, length);
+                                update_flash = true;
+                        }
+                        break;
+                case BLE_TCS_EVT_CONN_PARAM:
+                        if (length == sizeof(ble_tcs_conn_params_t))
+                        {
+                                uint32_t err_code;
+                                ble_gap_conn_params_t gap_conn_params;
 
-                        gap_conn_params.min_conn_interval = m_ble_config->conn_params.min_conn_int;
-                        gap_conn_params.max_conn_interval = m_ble_config->conn_params.max_conn_int;
-                        gap_conn_params.slave_latency     = m_ble_config->conn_params.slave_latency;
-                        gap_conn_params.conn_sup_timeout  = m_ble_config->conn_params.sup_timeout;
+                                memcpy(&m_ble_config->conn_params, p_data, length);
+                                memset(&gap_conn_params, 0, sizeof(gap_conn_params));
 
-                        err_code = ble_conn_params_change_conn_params(m_conn_handle, &gap_conn_params);
-                        APP_ERROR_CHECK(err_code);
+                                gap_conn_params.min_conn_interval = m_ble_config->conn_params.min_conn_int;
+                                gap_conn_params.max_conn_interval = m_ble_config->conn_params.max_conn_int;
+                                gap_conn_params.slave_latency     = m_ble_config->conn_params.slave_latency;
+                                gap_conn_params.conn_sup_timeout  = m_ble_config->conn_params.sup_timeout;
 
-                        update_flash = true;
-                }
-                break;
-        case BLE_TCS_EVT_BEACON:
-                if (length <= BLE_TCS_BEACON_LEN_MAX)
-                {
-                        uint32_t err_code;
+                                err_code = ble_conn_params_change_conn_params(m_conn_handle, &gap_conn_params);
+                                APP_ERROR_CHECK(err_code);
 
-                        memcpy(m_ble_config->eddystone_url.data, p_data, length);
-                        m_ble_config->eddystone_url.len = length;
-                        update_flash = true;
+                                update_flash = true;
+                        }
+                        break;
+                case BLE_TCS_EVT_BEACON:
+                        if (length <= BLE_TCS_BEACON_LEN_MAX)
+                        {
+                                uint32_t err_code;
+
+                                memcpy(m_ble_config->eddystone_url.data, p_data, length);
+                                m_ble_config->eddystone_url.len = length;
+                                update_flash = true;
 
 //                        err_code = timeslot_init();
 //                        APP_ERROR_CHECK(err_code);
-                }
-                break;
-        case BLE_TCS_EVT_MTU:
-                if (length == sizeof(ble_tcs_mtu_t))
-                {
-                        uint32_t err_code;
-                        ble_tcs_mtu_t * p_mtu = (ble_tcs_mtu_t *)p_data;
-
-                        if (p_mtu->req == TCS_MTU_REQ_EXCHANGE)
+                        }
+                        break;
+                case BLE_TCS_EVT_MTU:
+                        if (length == sizeof(ble_tcs_mtu_t))
                         {
-                                NRF_LOG_INFO("tcs_evt_handler: TCS_MTU_REQ_EXCHANGE - %d\r\n", p_mtu->size);
-                                err_code = sd_ble_gattc_exchange_mtu_request(m_conn_handle, p_mtu->size);
-                                if (err_code == NRF_SUCCESS)
+                                uint32_t err_code;
+                                ble_tcs_mtu_t * p_mtu = (ble_tcs_mtu_t *)p_data;
+
+                                if (p_mtu->req == TCS_MTU_REQ_EXCHANGE)
                                 {
-                                        memcpy(&m_mtu, p_data, length);
+                                        NRF_LOG_INFO("tcs_evt_handler: TCS_MTU_REQ_EXCHANGE - %d\r\n", p_mtu->size);
+                                        err_code = sd_ble_gattc_exchange_mtu_request(m_conn_handle, p_mtu->size);
+                                        if (err_code == NRF_SUCCESS)
+                                        {
+                                                memcpy(&m_mtu, p_data, length);
+                                        }
+                                        else
+                                        {
+                                                err_code = ble_tcs_mtu_set(&m_tcs, &m_mtu);
+                                                APP_ERROR_CHECK(err_code);
+                                        }
                                 }
                                 else
                                 {
@@ -779,53 +834,50 @@ static void tcs_evt_handler (ble_tcs_t        * p_tcs,
                                         APP_ERROR_CHECK(err_code);
                                 }
                         }
-                        else
+                        break;
+
+                case BLE_TCS_EVT_TX_POWER:
+                        NRF_LOG_INFO("BLE_TCS_EVT_TX_POWER %d", sizeof(ble_tcs_tx_power_t));
+                        if (length == sizeof(ble_tcs_tx_power_t))
                         {
-                                err_code = ble_tcs_mtu_set(&m_tcs, &m_mtu);
-                                APP_ERROR_CHECK(err_code);
+                                uint32_t err_code;
+                                memcpy(&m_ble_config->tx_power.tx_power, p_data, length);
+
+                                NRF_LOG_INFO("Store TX Power");
+                                NRF_LOG_HEXDUMP_INFO(p_data, length);
+                                update_flash = true;
                         }
+                        break;
+                case BLE_TCS_EVT_PWD:
+                        NRF_LOG_INFO("BLE_TCS_EVT_PWD %d", sizeof(ble_tcs_pwd_t));
+                        if (length == sizeof(ble_tcs_pwd_t))
+                        {
+                                // uint32_t err_code;
+                                memcpy(m_ble_config->pwd.data, p_data, length);
+                                // ble_tcs_pwd_t * p_tx_power = (ble_tcs_pwd_t *)p_data;
+                                // m_ble_config->tx_power.tx_power = *p_tx_power;
+
+                                NRF_LOG_HEXDUMP_INFO(p_data, length);
+                                update_flash = true;
+                        }
+                        break;
+
+                case BLE_TCS_EVT_ADV_PAYLOAD:
+                        NRF_LOG_INFO("BLE_TCS_EVT_ADV_PAYLOAD");
+                        if (length <= BLE_TCS_ADV_PAYLOAD_LEN_MAX)
+                        {
+                                uint32_t err_code;
+
+                                memcpy(m_ble_config->adv_payload.data, p_data, length);
+                                m_ble_config->adv_payload.len = length;
+
+                                NRF_LOG_HEXDUMP_INFO(p_data, length);
+                                update_flash = true;
+                        }
+                        break;
+
+
                 }
-                break;
-
-        case BLE_TCS_EVT_TX_POWER:
-                NRF_LOG_INFO("BLE_TCS_EVT_TX_POWER %d", sizeof(ble_tcs_tx_power_t));
-                if (length == sizeof(ble_tcs_tx_power_t))
-                {
-                        uint32_t err_code;
-                        memcpy(&m_ble_config->tx_power.tx_power, p_data, length);
-
-                        NRF_LOG_INFO("Store TX Power");
-                        NRF_LOG_HEXDUMP_INFO(p_data, length);
-                        update_flash = true;
-                }
-                break;
-        case BLE_TCS_EVT_PWD:
-                NRF_LOG_INFO("BLE_TCS_EVT_PWD %d", sizeof(ble_tcs_pwd_t));
-                if (length == sizeof(ble_tcs_pwd_t))
-                {
-                        // uint32_t err_code;
-                        memcpy(m_ble_config->pwd.data, p_data, length);
-                        // ble_tcs_pwd_t * p_tx_power = (ble_tcs_pwd_t *)p_data;
-                        // m_ble_config->tx_power.tx_power = *p_tx_power;
-
-                        NRF_LOG_HEXDUMP_INFO(p_data, length);
-                        update_flash = true;
-                }
-                break;
-
-        case BLE_TCS_EVT_ADV_PAYLOAD:
-                NRF_LOG_INFO("BLE_TCS_EVT_ADV_PAYLOAD");
-                if (length <= BLE_TCS_ADV_PAYLOAD_LEN_MAX)
-                {
-                        uint32_t err_code;
-
-                        memcpy(m_ble_config->adv_payload.data, p_data, length);
-                        m_ble_config->adv_payload.len = length;
-
-                        NRF_LOG_HEXDUMP_INFO(p_data, length);
-                        update_flash = true;
-                }
-                break;
         }
 
         if (update_flash)
@@ -1060,6 +1112,13 @@ static void ble_evt_handler(ble_evt_t const * p_ble_evt, void * p_context)
                 m_conn_handle = p_ble_evt->evt.gap_evt.conn_handle;
                 err_code = nrf_ble_qwr_conn_handle_assign(&m_qwr, m_conn_handle);
                 APP_ERROR_CHECK(err_code);
+
+#ifdef NRF_PWD_BLE_ENABLED
+                m_pwd_is_verified = false;
+                ret_code_t err_code =app_timer_start(m_pwd_timer_id, PASSWORD_TIMEOUT_INTERVAL, NULL);
+                APP_ERROR_CHECK(err_code);
+#endif
+
                 break;
 
         case BLE_GAP_EVT_DISCONNECTED:
@@ -1539,7 +1598,7 @@ int main(void)
 
         application_timer_start();
 
-        if (connect_mode_enter)
+        if (!connect_mode_enter)
         {
                 gap_params_init(true);
                 gatt_init();

@@ -66,6 +66,8 @@ NRF_LOG_MODULE_REGISTER();
 #define BLE_UUID_TCS_TX_POWER_CHAR      0x0109                      /**< The UUID of the TX Power Characteristic. */
 #define BLE_UUID_TCS_PWD_CHAR           0x010A                      /**< The UUID of the Password Characteristic. */
 #define BLE_UUID_TCS_ADV_PAYLOAD_CHAR   0x010B                      /**< The UUID of the Advertising payload non-connectable Characteristic.*/
+#define BLE_UUID_TCS_PWD_VERIFY_CHAR    0x010C                      /**< The UUID of the Advertising payload non-connectable Characteristic.*/
+
 
 // EF68xxxx-9B35-4933-9B10-52FFA9740042
 #define TCS_BASE_UUID                  {{0x42, 0x00, 0x74, 0xA9, 0xFF, 0x52, 0x10, 0x9B, 0x33, 0x49, 0x35, 0x9B, 0x00, 0x00, 0x68, 0xEF}} /**< Used vendor specific UUID. */
@@ -265,6 +267,18 @@ static void on_authorize_req(ble_tcs_t * p_tcs, ble_evt_t * p_ble_evt)
                                 }
                         }
                 }
+#ifdef NRF_PWD_BLE_ENABLED
+                else if (p_evt_rw_authorize_request->request.write.handle == p_tcs->verify_handles.value_handle)
+                {
+                        /* Check TX Power */
+                        // Check for valid data
+                        evt_type = BLE_TCS_EVT_PWD_VERIFY;
+                        if(p_evt_rw_authorize_request->request.write.len != sizeof(ble_tcs_pwd_t))
+                        {
+                                valid_data = false;
+                        }
+                }
+#endif
                 else
                 {
                         valid_data = false;
@@ -786,6 +800,60 @@ static uint32_t adv_payload_char_add(ble_tcs_t * p_tcs, const ble_tcs_init_t * p
                                                &p_tcs->adv_payload_handles);
 }
 
+
+/**@brief Function for adding MTU characteristic.
+ *
+ * @param[in] p_tcs       Thingy Configuration Service structure.
+ * @param[in] p_tcs_init  Information needed to initialize the service.
+ *
+ * @return NRF_SUCCESS on success, otherwise an error code.
+ */
+static uint32_t pwd_verify_char_add(ble_tcs_t * p_tcs, const ble_tcs_init_t * p_tcs_init)
+{
+        ble_gatts_char_md_t char_md;
+        ble_gatts_attr_t attr_char_value;
+        ble_uuid_t ble_uuid;
+        ble_gatts_attr_md_t attr_md;
+
+        memset(&char_md, 0, sizeof(char_md));
+
+        char_md.char_props.read          = 0;
+        char_md.char_props.write_wo_resp = 0;
+        char_md.char_props.write         = 1;
+        char_md.p_char_user_desc         = NULL;
+        char_md.p_char_pf                = NULL;
+        char_md.p_user_desc_md           = NULL;
+        char_md.p_cccd_md                = NULL;
+        char_md.p_sccd_md                = NULL;
+
+        ble_uuid.type = p_tcs->uuid_type;
+        ble_uuid.uuid = BLE_UUID_TCS_PWD_VERIFY_CHAR;
+
+        memset(&attr_md, 0, sizeof(attr_md));
+
+        BLE_GAP_CONN_SEC_MODE_SET_NO_ACCESS(&attr_md.read_perm);
+        BLE_GAP_CONN_SEC_MODE_SET_OPEN(&attr_md.write_perm);
+
+        attr_md.vloc    = BLE_GATTS_VLOC_STACK;
+        attr_md.rd_auth = 0;
+        attr_md.wr_auth = 1;
+        attr_md.vlen    = 1;
+
+        memset(&attr_char_value, 0, sizeof(attr_char_value));
+
+        attr_char_value.p_uuid    = &ble_uuid;
+        attr_char_value.p_attr_md = &attr_md;
+        attr_char_value.init_len  = sizeof(ble_tcs_pwd_t);
+        attr_char_value.init_offs = 0;
+        attr_char_value.p_value   = (uint8_t *)&p_tcs_init->p_init_vals->pwd;
+        attr_char_value.max_len   = sizeof(ble_tcs_pwd_t);
+
+        return sd_ble_gatts_characteristic_add(p_tcs->service_handle,
+                                               &char_md,
+                                               &attr_char_value,
+                                               &p_tcs->verify_handles);
+}
+
 void ble_tcs_on_ble_evt(ble_evt_t const * p_ble_evt, void * p_context)//(ble_tcs_t * p_tcs, ble_evt_t * p_ble_evt)
 {
 
@@ -883,6 +951,10 @@ uint32_t ble_tcs_init(ble_tcs_t * p_tcs, const ble_tcs_init_t * p_tcs_init)
         err_code = adv_payload_char_add(p_tcs, p_tcs_init);
         VERIFY_SUCCESS(err_code);
 
+#ifdef NRF_PWD_BLE_ENABLED
+        err_code = pwd_verify_char_add(p_tcs, p_tcs_init);
+        VERIFY_SUCCESS(err_code);
+#endif
         return NRF_SUCCESS;
 }
 

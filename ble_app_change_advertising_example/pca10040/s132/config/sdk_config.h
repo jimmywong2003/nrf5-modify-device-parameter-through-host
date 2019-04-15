@@ -46,6 +46,27 @@
 #ifdef USE_APP_CONFIG
 #include "app_config.h"
 #endif
+
+// <h> Password Protection
+//==========================================================
+
+// <q> NRF_PWD_BLE_ENABLED  - Password protection after BLE connection
+
+#ifndef NRF_PWD_BLE_ENABLED
+#define NRF_PWD_BLE_ENABLED 1
+#endif
+
+// <o> NRF_PWD_TIMEOUT_PERIOD - timeout period (in ms).
+// <i> Waiting interval for user to entry the password .
+
+#ifndef NRF_PWD_TIMEOUT_PERIOD
+#define NRF_PWD_TIMEOUT_PERIOD 30000
+#endif
+
+// </h>
+//==========================================================
+
+
 // <h> Board Support
 
 //==========================================================
