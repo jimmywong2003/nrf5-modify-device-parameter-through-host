@@ -26,3 +26,5 @@ This is the demo source code. It has not necessarily been thoroughly tested, so 
 The application is built to be used with the official nRF5 SDK, that can be downloaded from developer.nordicsemi.com
 
 You can place this example inside the SDK15.3/example/ble_peripheral folder.
+
+All the details are described at https://jimmywongbluetooth.wordpress.com/2019/04/15/how-to-modify-the-device-information-through-ble-connection/.
