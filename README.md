@@ -2,6 +2,17 @@
 
 This example is to show how to connect with mobile phone to change the advertising content / parameter.
 
+It adds the thingy configure service (tcs) with NUS and battery service in this example.
+
+It can use the nRF Connect to change the following parameters.
+1) Device name [R/W]
+2) Advertising interval [R/W]
+3) Connection parameter (minimum connection interval, maximum connection interval) [R/W]
+4) FW version (Read only)
+5) Configure the MTU length [R/W]
+
+The detail description of this example will be posted on my personal blog later.
+
 ## Requirement
 
 * NRF52832 DK
