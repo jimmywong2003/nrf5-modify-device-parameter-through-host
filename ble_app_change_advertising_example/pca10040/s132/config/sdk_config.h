@@ -60,7 +60,7 @@
 // <i> Waiting interval for user to entry the password .
 
 #ifndef NRF_PWD_TIMEOUT_PERIOD
-#define NRF_PWD_TIMEOUT_PERIOD 30000
+#define NRF_PWD_TIMEOUT_PERIOD 60000
 #endif
 
 // </h>

@@ -138,7 +138,7 @@
 #define APP_BEACON_UUID                 0x01, 0x12, 0x23, 0x34, \
         0x45, 0x56, 0x67, 0x78, \
         0x89, 0x9a, 0xab, 0xbc, \
-        0xcd, 0xde, 0xef, 0xf0        
+        0xcd, 0xde, 0xef, 0xf0
 
 #if defined(USE_THINGY_ADVERTISING_PAYLOAD)
 
@@ -155,7 +155,7 @@ static uint8_t m_hardcode_enc_advdata[BLE_GAP_ADV_SET_DATA_SIZE_MAX] =
 
 #else
 
-                                    /**< Proprietary UUID for Beacon. */
+/**< Proprietary UUID for Beacon. */
 
 #if defined(USE_UICR_FOR_MAJ_MIN_VALUES)
 #define MAJ_VAL_OFFSET_IN_BEACON_INFO   18                                 /**< Position of the MSB of the Major Value in m_beacon_info array. */
@@ -214,8 +214,8 @@ static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< I
 
 #define THINGY_DEFAULT_PASSWORD         "1111"
 
-#define THINGY_ADV_PAYLOAD_DEFAULT      "01234567890123456789012"
-#define THINGY_ADV_PAYLOAD_LEN           23
+#define THINGY_ADV_PAYLOAD_DEFAULT      "012345678901234567890123"
+#define THINGY_ADV_PAYLOAD_LEN           24
 
 /**@brief Thingy FW version.
  * 0xFF indicates a custom build from source.
@@ -1420,7 +1420,7 @@ static void non_connectable_advertising_init(void)
         m_adv_params.interval        = NON_CONNECTABLE_ADV_INTERVAL;
         m_adv_params.duration        = 0;   // Never time out.
 
-  
+
         NRF_LOG_HEXDUMP_INFO(m_ble_config->adv_payload.data, m_ble_config->adv_payload.len);
         memcpy(m_hardcode_enc_advdata[ADV_PAYLOAD_WITH_BATTERY+1], m_ble_config->adv_payload.data, m_ble_config->adv_payload.len);
 
