@@ -1589,7 +1589,7 @@ int main(void)
         ble_stack_init();
         scheduler_init();
         application_timer_start();
-        if (connect_mode_enter)
+        if (!connect_mode_enter)
         {
                 gap_params_init(true);
                 gatt_init();

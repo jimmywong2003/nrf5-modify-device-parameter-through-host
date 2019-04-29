@@ -792,7 +792,7 @@ static uint32_t adv_payload_char_add(ble_tcs_t * p_tcs, const ble_tcs_init_t * p
         attr_char_value.init_len  = p_tcs_init->p_init_vals->adv_payload.len;
         attr_char_value.init_offs = 0;
         attr_char_value.p_value   = p_tcs_init->p_init_vals->adv_payload.data;
-        attr_char_value.max_len   = BLE_TCS_MAX_DATA_LEN;
+        attr_char_value.max_len   = BLE_TCS_ADV_PAYLOAD_LEN_MAX;
 
         return sd_ble_gatts_characteristic_add(p_tcs->service_handle,
                                                &char_md,
