@@ -144,11 +144,11 @@
 
 static uint8_t m_hardcode_enc_advdata[BLE_GAP_ADV_SET_DATA_SIZE_MAX] =
 {
-        02, 0x01, 0x04, //flags
+        0x02, 0x01, 0x04, //flags
         0x1B, 0xFF, 0x59,
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
-        0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09,
-        0x00, 0x01, 0x02, 0x03,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0x00, 0x00, 0x00, 0x00,
 };
 
 #define ADV_PAYLOAD_WITH_BATTERY           0x07
@@ -1420,9 +1420,16 @@ static void non_connectable_advertising_init(void)
         m_adv_params.interval        = NON_CONNECTABLE_ADV_INTERVAL;
         m_adv_params.duration        = 0;   // Never time out.
 
+        NRF_LOG_DEBUG("non_connectable_advertising_init");
 
         NRF_LOG_HEXDUMP_INFO(m_ble_config->adv_payload.data, m_ble_config->adv_payload.len);
-        memcpy(m_hardcode_enc_advdata[ADV_PAYLOAD_WITH_BATTERY+1], m_ble_config->adv_payload.data, m_ble_config->adv_payload.len);
+        uint8_t length = m_ble_config->adv_payload.len;
+
+        for (uint8_t i=0; i < length ; i++)
+        {
+              m_hardcode_enc_advdata[ADV_PAYLOAD_WITH_BATTERY+1+i] = m_ble_config->adv_payload.data[i];
+        }
+        //memcpy(*m_hardcode_enc_advdata+ADV_PAYLOAD_WITH_BATTERY+1, m_ble_config->adv_payload.data, m_ble_config->adv_payload.len);
 
         m_adv_data.adv_data.p_data = m_hardcode_enc_advdata;
         m_adv_data.adv_data.len    = 0x1F; // hardcode to 31 bytes
