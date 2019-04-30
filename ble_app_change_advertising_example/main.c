@@ -743,6 +743,7 @@ static void tcs_evt_handler (ble_tcs_t        * p_tcs,
 
         if (evt_type == BLE_TCS_EVT_PWD_VERIFY)
         {
+                NRF_LOG_HEXDUMP_INFO(m_ble_config->pwd.data, sizeof(m_ble_config->pwd.data));
                 if (strncmp(p_data, m_ble_config->pwd.data, length)==0)
                 {
                         m_pwd_is_verified = true;
@@ -1377,8 +1378,14 @@ static void non_connectable_advertising_init(void)
         m_beacon_info[index++] = LSB_16(minor_value);
 #endif
 
-        manuf_specific_data.data.p_data = (uint8_t *) m_beacon_info;
-        manuf_specific_data.data.size   = APP_BEACON_INFO_LENGTH;
+//        manuf_specific_data.data.p_data = (uint8_t *) m_beacon_info;
+//        manuf_specific_data.data.size   = APP_BEACON_INFO_LENGTH;
+
+        manuf_specific_data.data.p_data = (uint8_t *) m_ble_config->adv_payload.data;
+        manuf_specific_data.data.size   = m_ble_config->adv_payload.len;
+
+        NRF_LOG_HEXDUMP_INFO(manuf_specific_data.data.p_data, manuf_specific_data.data.size);
+
 
         // Build and set advertising data.
         memset(&advdata, 0, sizeof(advdata));
@@ -1589,7 +1596,7 @@ int main(void)
         ble_stack_init();
         scheduler_init();
         application_timer_start();
-        if (!connect_mode_enter)
+        if (connect_mode_enter)
         {
                 gap_params_init(true);
                 gatt_init();

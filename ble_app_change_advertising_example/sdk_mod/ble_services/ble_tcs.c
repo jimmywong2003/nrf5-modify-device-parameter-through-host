@@ -257,6 +257,8 @@ static void on_authorize_req(ble_tcs_t * p_tcs, ble_evt_t * p_ble_evt)
                         /* Advertising Payload */
                         evt_type = BLE_TCS_EVT_ADV_PAYLOAD;
 
+                        NRF_LOG_INFO("BLE_TCS_EVT_ADV_PAYLOAD %d", p_evt_rw_authorize_request->request.write.len);
+
                         if (p_evt_rw_authorize_request->request.write.len > 0)
                         {
                                 // Check for valid data
