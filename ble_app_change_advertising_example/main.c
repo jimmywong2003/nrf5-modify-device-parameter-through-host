@@ -214,7 +214,10 @@ static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< I
 
 #define THINGY_DEFAULT_PASSWORD         "1111"
 
-#define THINGY_ADV_PAYLOAD_DEFAULT      "012345678901234567890123"
+#define THINGY_ADV_PAYLOAD_DEFAULT      { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, \
+                                          0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, \
+                                          0x00, 0x00, 0x00, 0x00 }
+
 #define THINGY_ADV_PAYLOAD_LEN           24
 
 /**@brief Thingy FW version.
@@ -1422,7 +1425,8 @@ static void non_connectable_advertising_init(void)
 
         NRF_LOG_DEBUG("non_connectable_advertising_init");
 
-        NRF_LOG_HEXDUMP_INFO(m_ble_config->adv_payload.data, m_ble_config->adv_payload.len);
+//        NRF_LOG_HEXDUMP_INFO(m_ble_config->adv_payload.data, m_ble_config->adv_payload.len);
+
         uint8_t length = m_ble_config->adv_payload.len;
 
         for (uint8_t i=0; i < length ; i++)
@@ -1433,6 +1437,7 @@ static void non_connectable_advertising_init(void)
 
         m_adv_data.adv_data.p_data = m_hardcode_enc_advdata;
         m_adv_data.adv_data.len    = 0x1F; // hardcode to 31 bytes
+        NRF_LOG_HEXDUMP_INFO(m_adv_data.adv_data.p_data, m_adv_data.adv_data.len);
 
         err_code = sd_ble_gap_adv_set_configure(&m_adv_handle, &m_adv_data, &m_adv_params);
         APP_ERROR_CHECK(err_code);
