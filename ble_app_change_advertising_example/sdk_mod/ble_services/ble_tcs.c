@@ -115,11 +115,13 @@ static void on_authorize_req(ble_tcs_t * p_tcs, ble_evt_t * p_ble_evt)
                 {
                         evt_type = BLE_TCS_EVT_DEV_NAME;
 
+                        
                         // Check for valid data
                         if(p_evt_rw_authorize_request->request.write.len > BLE_TCS_DEVICE_NAME_LEN_MAX)
                         {
                                 valid_data = false;
                         }
+                        NRF_LOG_INFO("BLE_TCS_EVT_DEV_NAME inside valid data = %d", valid_data);
                 }
                 else if (p_evt_rw_authorize_request->request.write.handle == p_tcs->adv_param_handles.value_handle)
                 {

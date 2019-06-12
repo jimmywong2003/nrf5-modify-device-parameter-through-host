@@ -110,23 +110,23 @@
 #define APP_BLE_OBSERVER_PRIO           3                                           /**< Application's BLE observer priority. You shouldn't need to modify this value. */
 #define APP_SOC_OBSERVER_PRIO           1
 
-#define APP_ADV_INTERVAL                64                                          /**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
+#define APP_ADV_INTERVAL                1600                                          /**< The advertising interval (in units of 0.625 ms. This value corresponds to 40 ms). */
 
 #define APP_ADV_DURATION                0                                       /**< The advertising duration (180 seconds) in units of 10 milliseconds. */
 
-#define APP_ADV_INTERVAL_MS             380                                         /**< The advertising interval in ms. */
+#define APP_ADV_INTERVAL_MS             1000//380                                         /**< The advertising interval in ms. */
 #define APP_ADV_TIMEOUT_IN_SECONDS      180                                         /**< The advertising timeout in s. */
 
 #define MIN_CONN_INTERVAL_MS            7.5                                         /**< Minimum acceptable connection interval in ms. */
 #define MAX_CONN_INTERVAL_MS            30                                          /**< Maximum acceptable connection interval in ms. */
 #define SLAVE_LATENCY                   0                                           /**< Slave latency. */
-#define CONN_SUP_TIMEOUT_MS             3200                                        /**< Connection supervisory timeout (4 seconds), Supervision Timeout uses 10 ms units. */
+#define CONN_SUP_TIMEOUT_MS             5000                                        /**< Connection supervisory timeout (4 seconds), Supervision Timeout uses 10 ms units. */
 #define FIRST_CONN_PARAMS_UPDATE_DELAY  APP_TIMER_TICKS(5000)  /**< Time from initiating event (connect or start of notification) to first time sd_ble_gap_conn_param_update is called (1 second). */
 #define NEXT_CONN_PARAMS_UPDATE_DELAY   APP_TIMER_TICKS(30000) /**< Time between each call to sd_ble_gap_conn_param_update after the first call (30 seconds). */
 #define MAX_CONN_PARAMS_UPDATE_COUNT    3                                           /**< Number of attempts before giving up the connection parameter negotiation. */
 
 
-#define NON_CONNECTABLE_ADV_INTERVAL    MSEC_TO_UNITS(100, UNIT_0_625_MS)  /**< The advertising interval for non-connectable advertisement (100 ms). This value can vary between 100ms to 10.24s). */
+#define NON_CONNECTABLE_ADV_INTERVAL    MSEC_TO_UNITS(1000, UNIT_0_625_MS)  /**< The advertising interval for non-connectable advertisement (100 ms). This value can vary between 100ms to 10.24s). */
 
 #define APP_BEACON_INFO_LENGTH          0x17                               /**< Total length of information advertised by the Beacon. */
 #define APP_ADV_DATA_LENGTH             0x15                               /**< Length of manufacturer specific data in the advertisement. */
@@ -178,10 +178,6 @@ static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< I
 #endif
 
 
-
-
-
-
 #define BATTERY_LEVEL_MEAS_INTERVAL         APP_TIMER_TICKS(2000)                   /**< Battery level measurement interval (ticks). */
 #define MIN_BATTERY_LEVEL                   81                                      /**< Minimum simulated battery level. */
 #define MAX_BATTERY_LEVEL                   100                                     /**< Maximum simulated 7battery level. */
@@ -208,7 +204,7 @@ static uint8_t m_beacon_info[APP_BEACON_INFO_LENGTH] =                    /**< I
 #define TX_POWER_LEVEL                  (0)                                    /**< TX Power Level value. This will be set both in the TX Power service, in the advertising data, and also used to set the radio transmit power. */
 
 /**@brief Thingy default beacon configuration. Eddystone url */
-#define THINGY_BEACON_ADV_INTERVAL      760                 /**< The Beacon's advertising interval, in milliseconds*/
+#define THINGY_BEACON_ADV_INTERVAL      1000//60                 /**< The Beacon's advertising interval, in milliseconds*/
 #define THINGY_BEACON_URL_DEFAULT       "\x03goo.gl/pIWdir" /**< https://goo.gl/pIWdir short for https://developer.nordicsemi.com/thingy/52/ */
 #define THINGY_BEACON_URL_LEN           14
 
@@ -404,7 +400,7 @@ void saadc_event_handler(nrf_drv_saadc_evt_t const * p_event)
                 nrf_saadc_value_t adc_result;
                 uint16_t batt_lvl_in_milli_volts;
                 // uint8_t percentage_batt_lvl;
-                uint32_t err_code;
+                uint32_t err_code = NRF_SUCCESS;
 
                 adc_result = p_event->data.done.p_buffer[0];
 
@@ -433,7 +429,11 @@ void saadc_event_handler(nrf_drv_saadc_evt_t const * p_event)
                                 APP_ERROR_HANDLER(err_code);
                         }
                 }
+
+                // uninit the SAADC after it finishs.
+                nrfx_saadc_uninit();
         }
+
 }
 
 /**@brief Function for configuring ADC to do battery level conversion.
@@ -469,6 +469,10 @@ static void battery_level_meas_timeout_handler(void * p_context)
         UNUSED_PARAMETER(p_context);
 
         ret_code_t err_code;
+
+        // Enable the SADDC to measure the battery on every 2s battery timer.
+        adc_configure();
+
         err_code = nrf_drv_saadc_sample();
         APP_ERROR_CHECK(err_code);
 }
@@ -674,10 +678,10 @@ static void gap_params_init(bool load_setting)
         err_code = sd_ble_gap_ppcp_set(&gap_conn_params);
         APP_ERROR_CHECK(err_code);
 
-        ble_gap_addr_t ble_address = {.addr_type = BLE_GAP_ADDR_TYPE_RANDOM_STATIC,
-                                      .addr_id_peer = 0,
-                                      .addr = {0xC3,0x11,0x99,0x33,0x44,0xFF}};
-        err_code = sd_ble_gap_addr_set(&ble_address);
+//        ble_gap_addr_t ble_address = {.addr_type = BLE_GAP_ADDR_TYPE_RANDOM_STATIC,
+//                                      .addr_id_peer = 0,
+//                                      .addr = {0xC3,0x11,0x99,0x33,0x44,0xFF}};
+//        err_code = sd_ble_gap_addr_set(&ble_address);
 }
 
 
@@ -1237,11 +1241,10 @@ static void ble_stack_init(void)
         err_code = nrf_sdh_ble_enable(&ram_start);
         APP_ERROR_CHECK(err_code);
 
-
         err_code = sd_power_mode_set(NRF_POWER_MODE_LOWPWR);
         APP_ERROR_CHECK(err_code);
 
-        err_code = sd_power_dcdc_mode_set(NRF_POWER_DCDC_ENABLE);
+        err_code = sd_power_dcdc_mode_set(NRF_POWER_DCDC_DISABLE);//NRF_POWER_DCDC_ENABLE);
         APP_ERROR_CHECK(err_code);
 
         // Register a handler for BLE events.
@@ -1496,9 +1499,12 @@ static void connectable_advertising_init(void)
         init.srdata.uuids_complete.uuid_cnt = sizeof(m_adv_uuids) / sizeof(m_adv_uuids[0]);
         init.srdata.uuids_complete.p_uuids  = m_adv_uuids;
 
-        init.config.ble_adv_fast_enabled  = true;
+        init.config.ble_adv_fast_enabled  = false;
         init.config.ble_adv_fast_interval = APP_ADV_INTERVAL;
         init.config.ble_adv_fast_timeout  = APP_ADV_DURATION;
+        init.config.ble_adv_slow_enabled  = true;
+        init.config.ble_adv_slow_interval = APP_ADV_INTERVAL;
+        init.config.ble_adv_slow_timeout  = APP_ADV_DURATION;
         init.evt_handler = on_adv_evt;
 
         err_code = ble_advertising_init(&m_advertising, &init);
@@ -1592,7 +1598,6 @@ static void idle_state_handle(void)
         (void) __get_FPSCR();
         NVIC_ClearPendingIRQ(FPU_IRQn);
 
-
         app_sched_execute();
         while(NRF_LOG_PROCESS());
         //UNUSED_RETURN_VALUE(NRF_LOG_PROCESS());
@@ -1631,16 +1636,15 @@ int main(void)
         bool connect_mode_enter = false;
         uint32_t err_code = NRF_SUCCESS;
 
-        /* enable instruction cache */
-        NRF_NVMC->ICACHECNF = (NVMC_ICACHECNF_CACHEEN_Enabled << NVMC_ICACHECNF_CACHEEN_Pos) +
-                              (NVMC_ICACHECNF_CACHEPROFEN_Disabled << NVMC_ICACHECNF_CACHEPROFEN_Pos);
+//        /* enable instruction cache */
+//        NRF_NVMC->ICACHECNF = (NVMC_ICACHECNF_CACHEEN_Enabled << NVMC_ICACHECNF_CACHEEN_Pos) +
+//                              (NVMC_ICACHECNF_CACHEPROFEN_Disabled << NVMC_ICACHECNF_CACHEPROFEN_Pos);
 
         // Initialize.
-        uart_init();
+//        uart_init();
         log_init();
         timers_init();
-        // Enable the SADDC to measure the battery
-        adc_configure();
+
         /**@brief Load configuration from flash. */
         err_code = m_ble_flash_init(&m_ble_default_config, &m_ble_config);
         if (err_code != NRF_SUCCESS)
@@ -1657,7 +1661,8 @@ int main(void)
         }
         enter_button_init();
         connect_mode_enter       = connect_adv_enter_check();
-        buttons_init();
+
+        //buttons_init();
         power_management_init();
         ble_stack_init();
         scheduler_init();
@@ -1683,8 +1688,8 @@ int main(void)
 
         }
 
-        err_code = app_button_enable();
-        APP_ERROR_CHECK(err_code);
+//        err_code = app_button_enable();
+//        APP_ERROR_CHECK(err_code);
 
         // Enter main loop.
         for (;;)
