@@ -397,7 +397,11 @@ void saadc_event_handler(nrf_drv_saadc_evt_t const * p_event)
                                 APP_ERROR_HANDLER(err_code);
                         }
                 }
+
+                // disable the SAADC after it finishs
+                nrf_drv_saadc_uninit();
         }
+
 }
 
 /**@brief Function for configuring ADC to do battery level conversion.
@@ -433,6 +437,10 @@ static void battery_level_meas_timeout_handler(void * p_context)
         UNUSED_PARAMETER(p_context);
 
         ret_code_t err_code;
+
+        // Enable the SADDC to measure the battery
+        adc_configure();
+
         err_code = nrf_drv_saadc_sample();
         APP_ERROR_CHECK(err_code);
 }
@@ -1573,8 +1581,8 @@ int main(void)
         uart_init();
         log_init();
         timers_init();
-        // Enable the SADDC to measure the battery
-        adc_configure();
+//        // Enable the SADDC to measure the battery
+//        adc_configure();
         /**@brief Load configuration from flash. */
         err_code = m_ble_flash_init(&m_ble_default_config, &m_ble_config);
         if (err_code != NRF_SUCCESS)

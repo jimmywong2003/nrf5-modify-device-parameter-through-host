@@ -111,10 +111,10 @@
       <file file_name="../../../../../../components/ble/ble_advertising/ble_advertising.c" />
       <file file_name="../../../../../../components/ble/common/ble_conn_params.c" />
       <file file_name="../../../../../../components/ble/common/ble_conn_state.c" />
-      <file file_name="../../../../../../components/ble/ble_link_ctx_manager/ble_link_ctx_manager.c" />
       <file file_name="../../../../../../components/ble/common/ble_srv_common.c" />
       <file file_name="../../../../../../components/ble/nrf_ble_gatt/nrf_ble_gatt.c" />
       <file file_name="../../../../../../components/ble/nrf_ble_qwr/nrf_ble_qwr.c" />
+      <file file_name="../../../../../../components/ble/ble_link_ctx_manager/ble_link_ctx_manager.c" />
     </folder>
     <folder Name="UTF8/UTF16 converter">
       <file file_name="../../../../../../external/utf_converter/utf.c" />
